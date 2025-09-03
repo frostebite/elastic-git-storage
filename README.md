@@ -1,6 +1,9 @@
-# flexible-large-storage - a git-lfs plugin
+# elastic-git-storage
+a git-lfs plugin that enables convenient use of the cheapest, easiest, fastest and most secure storage providers. 
 > Forked from [lfs-folderstore](https://github.com/sinbad/lfs-folderstore) by Steve Streeting.
 
+## Batteries included
+Fast and easy to setup. 
 
 > **No longer maintained**
 > Feel free to fork this repo if you like!
