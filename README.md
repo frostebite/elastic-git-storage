@@ -1,5 +1,4 @@
-# Git LFS: Shared Folder agen
-# flexible-large-storage
+# flexible-large-storage - a git-lfs plugin
 > Forked from [lfs-folderstore](https://github.com/sinbad/lfs-folderstore) by Steve Streeting.
 
 
