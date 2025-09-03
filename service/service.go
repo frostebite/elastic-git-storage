@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/pierrec/lz4/v4"
@@ -154,7 +155,10 @@ func tryRetrieveDir(dir, gitDir, oid string, size int64, writer, errWriter *bufi
 }
 
 func tryRetrieveScript(script, gitDir, oid string, size int64, writer, errWriter *bufio.Writer) error {
-	tempPath := downloadTempPath(gitDir, oid)
+	tempPath, err := downloadTempPath(gitDir, oid)
+	if err != nil {
+		return err
+	}
 	env := map[string]string{
 		"OID":  oid,
 		"DEST": tempPath,
@@ -387,12 +391,6 @@ func store(baseDir string, oid string, size int64, useAction bool, a *api.Action
 		}
 		lastErr = err
 	}
-
-	if util.IsRclonePath(baseDir) {
-		storeToRclone(destPath, statFrom, fromPath, oid, writer, errWriter)
-		return
-
-	}
 	api.SendTransferError(oid, 20, fmt.Sprintf("Unable to store %q: %v", oid, lastErr), writer, errWriter)
 }
 
@@ -415,7 +413,7 @@ func storeUsingScript(script string, oid string, statFrom os.FileInfo, fromPath 
 
 func storeToDir(baseDir string, oid string, statFrom os.FileInfo, fromPath string, writer, errWriter *bufio.Writer) error {
 	destPath := storagePath(baseDir, oid)
-	if isRclonePath(baseDir) {
+	if util.IsRclonePath(baseDir) {
 		already, err := storeToRclone(destPath, statFrom, fromPath, oid)
 		if err != nil {
 			return fmt.Errorf("error uploading %q via rclone: %v", oid, err)
