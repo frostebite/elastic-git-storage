@@ -114,37 +114,74 @@ when you clone fresh. Here's the sequence:
   space by deleting a specific project, in the latter case you can save space if
   you have common files between projects (they'll have the same hash)
 
-## Extended features
+## Advanced capabilities
+
+These features extend the basic folder store and can be combined as needed.
 
 ### Multiple storage locations
 Provide several folder paths separated by semicolons in the configuration argument. Each
 location is searched in order until the object is found.
 
+```bash
+git config --add lfs.customtransfer.lfs-folder.args \
+  "D:/fast-cache;/mnt/slow-storage"
+```
+
 ### Scripted transfers
 Prefix a location with `|` to run a shell script instead of using a directory. The script
-receives environment variables such as `OID`, `DEST` (for pulls) and `FROM` (for pushes),
-allowing custom transfer logic and prioritisation.
+receives environment variables such as `OID`, `DEST` (for pulls), `FROM` (for pushes) and
+`SIZE`, allowing custom transfer logic and prioritisation.
+
+```bash
+git config --add lfs.customtransfer.lfs-folder.args "|./transfer.sh;/mnt/storage"
+```
+
+`transfer.sh` can read `$OID` to locate the object and copy it to `$DEST` or from `$FROM`.
 
 ### Transparent compression
 Objects stored as `.zip` or `.lz4` files are automatically decompressed on download.
+Simply compress an object before uploading; no extra configuration is required.
 
 ### rclone integration
 Paths prefixed with an [rclone](https://rclone.org) alias (e.g. `remote:path`) are resolved
 via `rclone`, enabling uploads to or downloads from any backend that rclone supports.
+
+```bash
+git config --add lfs.customtransfer.lfs-folder.args "remote:bucket/path"
+```
 
 ### Mirroring to a main LFS server
 Use the `--pullmain` flag to fall back to the standard LFS server for downloads. Combine
 with `--pushmain` to mirror uploads there too. The older `--useaction` flag still enables
 both for backwards compatibility.
 
+```bash
+git config --add lfs.customtransfer.lfs-folder.args \
+  "--pullmain --pushmain /mnt/lfs-folder"
+```
+
 ### Separate upload destinations
 Override the upload location separately from downloads with the `--pushdir` flag, which
 may point to another folder or rclone remote.
+
+```bash
+git config --add lfs.customtransfer.lfs-folder.args \
+  "--pushdir /mnt/upload /mnt/download"
+```
 
 ### Git configuration
 Base directories and main-remote options may also be configured via git config keys
 `lfs.folderstore.pull`, `lfs.folderstore.push`, `lfs.folderstore.pullmain` and
 `lfs.folderstore.pushmain` which can be set globally or per-repo.
+
+```bash
+git config --global lfs.folderstore.pull /mnt/storage
+git config --global lfs.folderstore.push /mnt/uploads
+git config --global lfs.folderstore.pullmain true
+git config --global lfs.folderstore.pushmain true
+```
+
+These settings remove the need to pass arguments in `lfs.customtransfer.lfs-folder.args`.
 
 ## License (MIT)
 
