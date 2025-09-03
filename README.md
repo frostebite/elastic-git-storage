@@ -1,3 +1,5 @@
+<img width="1024" height="1024" alt="image" src="https://github.com/user-attachments/assets/69066daf-4851-41bb-8203-7c024e966149" />
+
 # elastic-git-storage
 a git-lfs plugin that enables convenient use of the cheapest, easiest, fastest and most secure storage providers. 
 > Forked from [lfs-folderstore](https://github.com/sinbad/lfs-folderstore) by Steve Streeting.
