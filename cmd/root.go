@@ -118,7 +118,7 @@ func rootCommand(cmd *cobra.Command, args []string) {
 		cmd.Usage()
 		os.Exit(1)
 	}
-	if !util.IsRclonePath(pullDir) {
+	if !util.IsRclonePath(pullDir) && !strings.ContainsAny(pullDir, "|;") && !strings.Contains(pullDir, "--compression=") {
 		stat, err := os.Stat(pullDir)
 		if err != nil || !stat.IsDir() {
 			os.Stderr.WriteString(fmt.Sprintf("%q does not exist or is not a directory", pullDir))
@@ -135,7 +135,7 @@ func rootCommand(cmd *cobra.Command, args []string) {
 	if push == "" {
 		push = pullDir
 	}
-	if !util.IsRclonePath(push) {
+	if !util.IsRclonePath(push) && !strings.ContainsAny(push, "|;") && !strings.Contains(push, "--compression=") {
 		stat, err := os.Stat(push)
 		if err != nil || !stat.IsDir() {
 			os.Stderr.WriteString(fmt.Sprintf("%q does not exist or is not a directory", push))

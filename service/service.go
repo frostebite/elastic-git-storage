@@ -19,6 +19,12 @@ import (
 	"github.com/sinbad/lfs-folderstore/util"
 )
 
+type baseDirConfig struct {
+	path        string
+	compression string
+	script      bool
+}
+
 // Serve starts the protocol server
 // usePullAction/usePushAction indicate whether to fall back to LFS actions
 // for downloads and uploads respectively.
@@ -93,16 +99,12 @@ func retrieve(baseDir, gitDir, oid string, size int64, useAction bool, a *api.Ac
 
 	dirs := splitBaseDirs(baseDir)
 	var lastErr error
-	for _, dir := range dirs {
-		dir = strings.TrimSpace(dir)
-		if len(dir) == 0 {
-			continue
-		}
+	for _, d := range dirs {
 		var err error
-		if strings.HasPrefix(dir, "|") {
-			err = tryRetrieveScript(dir[1:], gitDir, oid, size, writer, errWriter)
+		if d.script {
+			err = tryRetrieveScript(d.path, gitDir, oid, size, d.compression, writer, errWriter)
 		} else {
-			err = tryRetrieveDir(dir, gitDir, oid, size, writer, errWriter)
+			err = tryRetrieveDir(d.path, gitDir, oid, size, d.compression, writer, errWriter)
 		}
 		if err == nil {
 			return
@@ -124,37 +126,64 @@ func retrieve(baseDir, gitDir, oid string, size int64, useAction bool, a *api.Ac
 	api.SendTransferError(oid, 3, fmt.Sprintf("Unable to retrieve %q: %v", oid, lastErr), writer, errWriter)
 }
 
-func splitBaseDirs(baseDir string) []string {
-	return strings.Split(baseDir, ";")
+func splitBaseDirs(baseDir string) []baseDirConfig {
+	parts := strings.Split(baseDir, ";")
+	var dirs []baseDirConfig
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		cfg := baseDirConfig{compression: "none"}
+		if strings.HasPrefix(p, "--compression=") {
+			sp := strings.SplitN(p, " ", 2)
+			cfg.compression = strings.TrimPrefix(sp[0], "--compression=")
+			if len(sp) > 1 {
+				p = strings.TrimSpace(sp[1])
+			} else {
+				continue
+			}
+		}
+		if strings.HasPrefix(p, "|") {
+			cfg.script = true
+			p = strings.TrimPrefix(p, "|")
+		}
+		cfg.path = strings.Trim(p, "'")
+		dirs = append(dirs, cfg)
+	}
+	return dirs
 }
 
-func tryRetrieveDir(dir, gitDir, oid string, size int64, writer, errWriter *bufio.Writer) error {
+func tryRetrieveDir(dir, gitDir, oid string, size int64, compression string, writer, errWriter *bufio.Writer) error {
 	if util.IsRclonePath(dir) {
-		return retrieveFromRclone(dir, gitDir, oid, size, writer, errWriter)
+		return retrieveFromRclone(dir, gitDir, oid, size, compression, writer, errWriter)
 	}
 
 	filePath := storagePath(dir, oid)
-	if stat, err := os.Stat(filePath); err == nil && stat.Mode().IsRegular() {
-		f, err := os.Open(filePath)
-		if err != nil {
-			return err
+	switch compression {
+	case "zip":
+		if _, err := os.Stat(filePath + ".zip"); err == nil {
+			return retrieveFromZip(filePath+".zip", gitDir, oid, size, writer, errWriter)
 		}
-		defer f.Close()
-		return saveToTempFromReader(f, stat.Size(), gitDir, oid, writer, errWriter)
-	}
-
-	if _, err := os.Stat(filePath + ".zip"); err == nil {
-		return retrieveFromZip(filePath+".zip", gitDir, oid, size, writer, errWriter)
-	}
-
-	if _, err := os.Stat(filePath + ".lz4"); err == nil {
-		return retrieveFromLz4(filePath+".lz4", gitDir, oid, size, writer, errWriter)
+	case "lz4":
+		if _, err := os.Stat(filePath + ".lz4"); err == nil {
+			return retrieveFromLz4(filePath+".lz4", gitDir, oid, size, writer, errWriter)
+		}
+	default:
+		if stat, err := os.Stat(filePath); err == nil && stat.Mode().IsRegular() {
+			f, err := os.Open(filePath)
+			if err != nil {
+				return err
+			}
+			defer f.Close()
+			return saveToTempFromReader(f, stat.Size(), gitDir, oid, writer, errWriter)
+		}
 	}
 
 	return fmt.Errorf("%s not found", filePath)
 }
 
-func tryRetrieveScript(script, gitDir, oid string, size int64, writer, errWriter *bufio.Writer) error {
+func tryRetrieveScript(script, gitDir, oid string, size int64, compression string, writer, errWriter *bufio.Writer) error {
 	tempPath, err := downloadTempPath(gitDir, oid)
 	if err != nil {
 		return err
@@ -163,6 +192,9 @@ func tryRetrieveScript(script, gitDir, oid string, size int64, writer, errWriter
 		"OID":  oid,
 		"DEST": tempPath,
 		"SIZE": fmt.Sprintf("%d", size),
+	}
+	if compression != "" {
+		env["COMPRESSION"] = compression
 	}
 	if err := runScript(script, env); err != nil {
 		return err
@@ -292,32 +324,37 @@ func retrieveFromLz4(path, gitDir, oid string, size int64, writer, errWriter *bu
 	return saveToTempFromReader(lr, size, gitDir, oid, writer, errWriter)
 }
 
-func retrieveFromRclone(base, gitDir, oid string, size int64, writer, errWriter *bufio.Writer) error {
+func retrieveFromRclone(base, gitDir, oid string, size int64, compression string, writer, errWriter *bufio.Writer) error {
 	remote := storagePath(base, oid)
-	if data, err := catRclone(remote); err == nil {
-		return saveToTempFromReader(bytes.NewReader(data), size, gitDir, oid, writer, errWriter)
-	}
-	if data, err := catRclone(remote + ".lz4"); err == nil {
-		lr := lz4.NewReader(bytes.NewReader(data))
-		return saveToTempFromReader(lr, size, gitDir, oid, writer, errWriter)
-	}
-	if data, err := catRclone(remote + ".zip"); err == nil {
-		zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
-		if err != nil {
-			return err
+	switch compression {
+	case "zip":
+		if data, err := catRclone(remote + ".zip"); err == nil {
+			zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+			if err != nil {
+				return err
+			}
+			if len(zr.File) == 0 {
+				return fmt.Errorf("zip file empty")
+			}
+			rc, err := zr.File[0].Open()
+			if err != nil {
+				return err
+			}
+			defer rc.Close()
+			if size == 0 {
+				size = int64(zr.File[0].UncompressedSize64)
+			}
+			return saveToTempFromReader(rc, size, gitDir, oid, writer, errWriter)
 		}
-		if len(zr.File) == 0 {
-			return fmt.Errorf("zip file empty")
+	case "lz4":
+		if data, err := catRclone(remote + ".lz4"); err == nil {
+			lr := lz4.NewReader(bytes.NewReader(data))
+			return saveToTempFromReader(lr, size, gitDir, oid, writer, errWriter)
 		}
-		rc, err := zr.File[0].Open()
-		if err != nil {
-			return err
+	default:
+		if data, err := catRclone(remote); err == nil {
+			return saveToTempFromReader(bytes.NewReader(data), size, gitDir, oid, writer, errWriter)
 		}
-		defer rc.Close()
-		if size == 0 {
-			size = int64(zr.File[0].UncompressedSize64)
-		}
-		return saveToTempFromReader(rc, size, gitDir, oid, writer, errWriter)
 	}
 	return fmt.Errorf("rclone path not found")
 }
@@ -359,6 +396,59 @@ func copyFileContents(size int64, src, dst *os.File, cb copyCallback) error {
 	return nil
 }
 
+func copyData(size int64, src io.Reader, dst io.Writer, cb copyCallback) error {
+	const blockSize = 4 * 1024 * 16
+	buf := make([]byte, blockSize)
+	var readSoFar int64
+	for {
+		n, err := src.Read(buf)
+		if n > 0 {
+			if _, werr := dst.Write(buf[:n]); werr != nil {
+				return werr
+			}
+			readSoFar += int64(n)
+			if cb != nil {
+				cb(size, readSoFar, n)
+			}
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func compressToZip(src *os.File, dst *os.File, size int64, name string, cb copyCallback) error {
+	zw := zip.NewWriter(dst)
+	w, err := zw.Create(name)
+	if err != nil {
+		return err
+	}
+	if err := copyData(size, src, w, cb); err != nil {
+		zw.Close()
+		return err
+	}
+	if err := zw.Close(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func compressToLz4(src *os.File, dst *os.File, size int64, cb copyCallback) error {
+	lw := lz4.NewWriter(dst)
+	if err := copyData(size, src, lw, cb); err != nil {
+		lw.Close()
+		return err
+	}
+	if err := lw.Close(); err != nil {
+		return err
+	}
+	return nil
+}
+
 func store(baseDir string, oid string, size int64, useAction bool, a *api.Action, fromPath string, writer, errWriter *bufio.Writer) {
 	statFrom, err := os.Stat(fromPath)
 	if err != nil {
@@ -375,16 +465,12 @@ func store(baseDir string, oid string, size int64, useAction bool, a *api.Action
 
 	dirs := splitBaseDirs(baseDir)
 	var lastErr error
-	for _, dir := range dirs {
-		dir = strings.TrimSpace(dir)
-		if len(dir) == 0 {
-			continue
-		}
+	for _, d := range dirs {
 		var err error
-		if strings.HasPrefix(dir, "|") {
-			err = storeUsingScript(dir[1:], oid, statFrom, fromPath, writer, errWriter)
+		if d.script {
+			err = storeUsingScript(d.path, d.compression, oid, statFrom, fromPath, writer, errWriter)
 		} else {
-			err = storeToDir(dir, oid, statFrom, fromPath, writer, errWriter)
+			err = storeToDir(d.path, d.compression, oid, statFrom, fromPath, writer, errWriter)
 		}
 		if err == nil {
 			return
@@ -394,11 +480,14 @@ func store(baseDir string, oid string, size int64, useAction bool, a *api.Action
 	api.SendTransferError(oid, 20, fmt.Sprintf("Unable to store %q: %v", oid, lastErr), writer, errWriter)
 }
 
-func storeUsingScript(script string, oid string, statFrom os.FileInfo, fromPath string, writer, errWriter *bufio.Writer) error {
+func storeUsingScript(script string, compression string, oid string, statFrom os.FileInfo, fromPath string, writer, errWriter *bufio.Writer) error {
 	env := map[string]string{
 		"OID":  oid,
 		"FROM": fromPath,
 		"SIZE": fmt.Sprintf("%d", statFrom.Size()),
+	}
+	if compression != "" {
+		env["COMPRESSION"] = compression
 	}
 	if err := runScript(script, env); err != nil {
 		return err
@@ -411,10 +500,16 @@ func storeUsingScript(script string, oid string, statFrom os.FileInfo, fromPath 
 	return nil
 }
 
-func storeToDir(baseDir string, oid string, statFrom os.FileInfo, fromPath string, writer, errWriter *bufio.Writer) error {
+func storeToDir(baseDir, compression string, oid string, statFrom os.FileInfo, fromPath string, writer, errWriter *bufio.Writer) error {
 	destPath := storagePath(baseDir, oid)
+	switch compression {
+	case "zip":
+		destPath += ".zip"
+	case "lz4":
+		destPath += ".lz4"
+	}
 	if util.IsRclonePath(baseDir) {
-		already, err := storeToRclone(destPath, statFrom, fromPath, oid)
+		already, err := storeToRclone(destPath, compression, statFrom, fromPath, oid)
 		if err != nil {
 			return fmt.Errorf("error uploading %q via rclone: %v", oid, err)
 		}
@@ -430,7 +525,7 @@ func storeToDir(baseDir string, oid string, statFrom os.FileInfo, fromPath strin
 	}
 
 	statDest, err := os.Stat(destPath)
-	if err == nil && statFrom.Size() == statDest.Size() {
+	if err == nil && compression == "none" && statFrom.Size() == statDest.Size() {
 		util.WriteToStderr(fmt.Sprintf("Skipping %v, already stored", oid), errWriter)
 		api.SendProgress(oid, statFrom.Size(), int(statFrom.Size()), writer, errWriter)
 		complete := &api.TransferResponse{Event: "complete", Oid: oid, Error: nil}
@@ -467,10 +562,19 @@ func storeToDir(baseDir string, oid string, statFrom os.FileInfo, fromPath strin
 		return nil
 	}
 
-	if err := copyFileContents(statFrom.Size(), srcf, dstf, cb); err != nil {
+	var copyErr error
+	switch compression {
+	case "zip":
+		copyErr = compressToZip(srcf, dstf, statFrom.Size(), oid, cb)
+	case "lz4":
+		copyErr = compressToLz4(srcf, dstf, statFrom.Size(), cb)
+	default:
+		copyErr = copyFileContents(statFrom.Size(), srcf, dstf, cb)
+	}
+	if copyErr != nil {
 		dstf.Close()
 		os.Remove(tempPath)
-		return fmt.Errorf("Error writing temp file %q: %v", tempPath, err)
+		return fmt.Errorf("Error writing temp file %q: %v", tempPath, copyErr)
 	}
 
 	dstf.Close()
@@ -512,14 +616,44 @@ func uploadViaAction(a *api.Action, fromPath string, size int64) error {
 	return nil
 }
 
-func storeToRclone(destPath string, statFrom os.FileInfo, fromPath, oid string) (bool, error) {
-	if size, err := statRclone(destPath); err == nil {
+func storeToRclone(destPath, compression string, statFrom os.FileInfo, fromPath, oid string) (bool, error) {
+	if size, err := statRclone(destPath); err == nil && compression == "none" {
 		if size == statFrom.Size() {
 			return true, nil
 		}
 	}
 
-	cmd := util.NewCmd("rclone", "copyto", fromPath, destPath)
+	src := fromPath
+	var tmp *os.File
+	var err error
+	if compression == "zip" || compression == "lz4" {
+		tmp, err = os.CreateTemp("", "lfs-folderstore")
+		if err != nil {
+			return false, err
+		}
+		defer os.Remove(tmp.Name())
+		srcf, err := os.Open(fromPath)
+		if err != nil {
+			tmp.Close()
+			return false, err
+		}
+		if compression == "zip" {
+			err = compressToZip(srcf, tmp, statFrom.Size(), oid, nil)
+		} else {
+			err = compressToLz4(srcf, tmp, statFrom.Size(), nil)
+		}
+		srcf.Close()
+		if err != nil {
+			tmp.Close()
+			return false, err
+		}
+		if err := tmp.Close(); err != nil {
+			return false, err
+		}
+		src = tmp.Name()
+	}
+
+	cmd := util.NewCmd("rclone", "copyto", src, destPath)
 	if err := cmd.Run(); err != nil {
 		return false, err
 	}
