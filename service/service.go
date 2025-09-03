@@ -25,6 +25,9 @@ import (
 func Serve(pullBaseDir, pushBaseDir string, usePullAction, usePushAction bool, stdin io.Reader, stdout, stderr io.Writer) {
 
 	scanner := bufio.NewScanner(stdin)
+	// Allow requests larger than the default 64 KB limit by raising the
+	// maximum token size to 1 MB.
+	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
 	writer := bufio.NewWriter(stdout)
 	errWriter := bufio.NewWriter(stderr)
 
