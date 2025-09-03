@@ -662,6 +662,18 @@ func completionPaths(t *testing.T, stdout string) map[string]string {
 	return paths
 }
 
+func TestServeHandlesLargeRequests(t *testing.T) {
+	padding := strings.Repeat("a", 70*1024)
+	req := fmt.Sprintf("{\"event\":\"terminate\",\"padding\":\"%s\"}\n", padding)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	Serve("", "", false, false, strings.NewReader(req), &stdout, &stderr)
+
+	assert.Contains(t, stderr.String(), "Terminating test custom adapter gracefully.")
+}
+
 func createZipFromFile(src, dest string) error {
 	in, err := os.Open(src)
 	if err != nil {
