@@ -611,7 +611,8 @@ func TestRetrieveScript(t *testing.T) {
 	err = tryRetrieveScript(script, gitDir, oid, int64(len(content)), writer, errWriter)
 	assert.Nil(t, err)
 
-	dest := downloadTempPath(gitDir, oid)
+	dest, err := downloadTempPath(gitDir, oid)
+	assert.Nil(t, err)
 	data, err := ioutil.ReadFile(dest)
 	assert.Nil(t, err)
 	assert.Equal(t, string(content), string(data))
