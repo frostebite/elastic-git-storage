@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/pierrec/lz4/v4"
@@ -129,7 +128,7 @@ func splitBaseDirs(baseDir string) []string {
 }
 
 func tryRetrieveDir(dir, gitDir, oid string, size int64, writer, errWriter *bufio.Writer) error {
-	if isRclonePath(dir) {
+	if util.IsRclonePath(dir) {
 		return retrieveFromRclone(dir, gitDir, oid, size, writer, errWriter)
 	}
 
@@ -330,15 +329,6 @@ func catRclone(remote string) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
-func isRclonePath(path string) bool {
-	if runtime.GOOS == "windows" {
-		if len(path) >= 2 && path[1] == ':' {
-			return false
-		}
-	}
-	return strings.Contains(path, ":")
-}
-
 type copyCallback func(totalSize int64, readSoFar int64, readSinceLast int) error
 
 func copyFileContents(size int64, src, dst *os.File, cb copyCallback) error {
@@ -398,8 +388,10 @@ func store(baseDir string, oid string, size int64, useAction bool, a *api.Action
 		lastErr = err
 	}
 
-	if lastErr == nil {
-		lastErr = fmt.Errorf("no storage locations succeeded")
+	if util.IsRclonePath(baseDir) {
+		storeToRclone(destPath, statFrom, fromPath, oid, writer, errWriter)
+		return
+
 	}
 	api.SendTransferError(oid, 20, fmt.Sprintf("Unable to store %q: %v", oid, lastErr), writer, errWriter)
 }
