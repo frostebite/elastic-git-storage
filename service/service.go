@@ -93,11 +93,16 @@ func retrieve(baseDir, gitDir, oid string, size int64, useAction bool, a *api.Ac
 		if len(dir) == 0 {
 			continue
 		}
-		if err := tryRetrieveDir(dir, gitDir, oid, size, writer, errWriter); err == nil {
-			return
+		var err error
+		if strings.HasPrefix(dir, "|") {
+			err = tryRetrieveScript(dir[1:], gitDir, oid, size, writer, errWriter)
 		} else {
-			lastErr = err
+			err = tryRetrieveDir(dir, gitDir, oid, size, writer, errWriter)
 		}
+		if err == nil {
+			return
+		}
+		lastErr = err
 	}
 
 	if useAction && a != nil {
@@ -142,6 +147,28 @@ func tryRetrieveDir(dir, gitDir, oid string, size int64, writer, errWriter *bufi
 	}
 
 	return fmt.Errorf("%s not found", filePath)
+}
+
+func tryRetrieveScript(script, gitDir, oid string, size int64, writer, errWriter *bufio.Writer) error {
+	tempPath := downloadTempPath(gitDir, oid)
+	env := map[string]string{
+		"OID":  oid,
+		"DEST": tempPath,
+		"SIZE": fmt.Sprintf("%d", size),
+	}
+	if err := runScript(script, env); err != nil {
+		return err
+	}
+	stat, err := os.Stat(tempPath)
+	if err != nil {
+		return err
+	}
+	api.SendProgress(oid, stat.Size(), int(stat.Size()), writer, errWriter)
+	complete := &api.TransferResponse{Event: "complete", Oid: oid, Path: tempPath, Error: nil}
+	if err := api.SendResponse(complete, writer, errWriter); err != nil {
+		util.WriteToStderr(fmt.Sprintf("Unable to send completion message: %v\n", err), errWriter)
+	}
+	return nil
 }
 
 func retrieveFromAction(a *api.Action, gitDir, oid string, size int64, writer, errWriter *bufio.Writer) error {
@@ -344,91 +371,121 @@ func store(baseDir string, oid string, size int64, useAction bool, a *api.Action
 		}
 	}
 
-	destPath := storagePath(baseDir, oid)
+	dirs := splitBaseDirs(baseDir)
+	var lastErr error
+	for _, dir := range dirs {
+		dir = strings.TrimSpace(dir)
+		if len(dir) == 0 {
+			continue
+		}
+		var err error
+		if strings.HasPrefix(dir, "|") {
+			err = storeUsingScript(dir[1:], oid, statFrom, fromPath, writer, errWriter)
+		} else {
+			err = storeToDir(dir, oid, statFrom, fromPath, writer, errWriter)
+		}
+		if err == nil {
+			return
+		}
+		lastErr = err
+	}
 
+	if lastErr == nil {
+		lastErr = fmt.Errorf("no storage locations succeeded")
+	}
+	api.SendTransferError(oid, 20, fmt.Sprintf("Unable to store %q: %v", oid, lastErr), writer, errWriter)
+}
+
+func storeUsingScript(script string, oid string, statFrom os.FileInfo, fromPath string, writer, errWriter *bufio.Writer) error {
+	env := map[string]string{
+		"OID":  oid,
+		"FROM": fromPath,
+		"SIZE": fmt.Sprintf("%d", statFrom.Size()),
+	}
+	if err := runScript(script, env); err != nil {
+		return err
+	}
+	api.SendProgress(oid, statFrom.Size(), int(statFrom.Size()), writer, errWriter)
+	complete := &api.TransferResponse{Event: "complete", Oid: oid, Error: nil}
+	if err := api.SendResponse(complete, writer, errWriter); err != nil {
+		util.WriteToStderr(fmt.Sprintf("Unable to send completion message: %v\n", err), errWriter)
+	}
+	return nil
+}
+
+func storeToDir(baseDir string, oid string, statFrom os.FileInfo, fromPath string, writer, errWriter *bufio.Writer) error {
+	destPath := storagePath(baseDir, oid)
 	if isRclonePath(baseDir) {
-		storeToRclone(destPath, statFrom, fromPath, oid, writer, errWriter)
-		return
+		already, err := storeToRclone(destPath, statFrom, fromPath, oid)
+		if err != nil {
+			return fmt.Errorf("error uploading %q via rclone: %v", oid, err)
+		}
+		if already {
+			util.WriteToStderr(fmt.Sprintf("Skipping %v, already stored", oid), errWriter)
+		}
+		api.SendProgress(oid, statFrom.Size(), int(statFrom.Size()), writer, errWriter)
+		complete := &api.TransferResponse{Event: "complete", Oid: oid, Error: nil}
+		if err := api.SendResponse(complete, writer, errWriter); err != nil {
+			util.WriteToStderr(fmt.Sprintf("Unable to send completion message: %v\n", err), errWriter)
+		}
+		return nil
 	}
 
 	statDest, err := os.Stat(destPath)
-	if err == nil {
-		// if file exists, skip if already the same size
-		if statFrom.Size() == statDest.Size() {
-			util.WriteToStderr(fmt.Sprintf("Skipping %v, already stored", oid), errWriter)
-
-			// send full progress
-			api.SendProgress(oid, statFrom.Size(), int(statFrom.Size()), writer, errWriter)
-			// send completion
-			complete := &api.TransferResponse{Event: "complete", Oid: oid, Error: nil}
-			err = api.SendResponse(complete, writer, errWriter)
-			if err != nil {
-				util.WriteToStderr(fmt.Sprintf("Unable to send completion message: %v\n", err), errWriter)
-			}
-			return
+	if err == nil && statFrom.Size() == statDest.Size() {
+		util.WriteToStderr(fmt.Sprintf("Skipping %v, already stored", oid), errWriter)
+		api.SendProgress(oid, statFrom.Size(), int(statFrom.Size()), writer, errWriter)
+		complete := &api.TransferResponse{Event: "complete", Oid: oid, Error: nil}
+		if err := api.SendResponse(complete, writer, errWriter); err != nil {
+			util.WriteToStderr(fmt.Sprintf("Unable to send completion message: %v\n", err), errWriter)
 		}
+		return nil
 	}
 
-	err = os.MkdirAll(filepath.Dir(destPath), 0755)
-	if err != nil {
-		api.SendTransferError(oid, 14, fmt.Sprintf("Cannot create dir %q: %v", filepath.Dir(destPath), err), writer, errWriter)
-		return
+	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+		return fmt.Errorf("Cannot create dir %q: %v", filepath.Dir(destPath), err)
 	}
 
-	// write a temp file in same folder, then rename
 	tempPath := fmt.Sprintf("%v.tmp", destPath)
 	if _, err := os.Stat(tempPath); err == nil {
-		// delete temp file
-		err := os.Remove(tempPath)
-		if err != nil && !os.IsNotExist(err) {
-			api.SendTransferError(oid, 14, fmt.Sprintf("Cannot remove existing temp file %q: %v", tempPath, err), writer, errWriter)
-			return
+		if err := os.Remove(tempPath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("Cannot remove existing temp file %q: %v", tempPath, err)
 		}
 	}
 
 	srcf, err := os.OpenFile(fromPath, os.O_RDONLY, 0644)
 	if err != nil {
-		api.SendTransferError(oid, 15, fmt.Sprintf("Cannot read data from %q: %v", fromPath, err), writer, errWriter)
-		return
+		return fmt.Errorf("Cannot read data from %q: %v", fromPath, err)
 	}
 	defer srcf.Close()
 
 	dstf, err := os.OpenFile(tempPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, statFrom.Mode())
 	if err != nil {
-		api.SendTransferError(oid, 16, fmt.Sprintf("Cannot open temp file for writing %q: %v", tempPath, err), writer, errWriter)
-		return
+		return fmt.Errorf("Cannot open temp file for writing %q: %v", tempPath, err)
 	}
-	defer dstf.Close()
 
 	cb := func(totalSize, readSoFar int64, readSinceLast int) error {
 		api.SendProgress(oid, readSoFar, readSinceLast, writer, errWriter)
 		return nil
 	}
 
-	err = copyFileContents(statFrom.Size(), srcf, dstf, cb)
-	if err != nil {
-		api.SendTransferError(oid, 17, fmt.Sprintf("Error writing temp file %q: %v", tempPath, err), writer, errWriter)
+	if err := copyFileContents(statFrom.Size(), srcf, dstf, cb); err != nil {
 		dstf.Close()
 		os.Remove(tempPath)
-		return
+		return fmt.Errorf("Error writing temp file %q: %v", tempPath, err)
 	}
 
-	// now rename
 	dstf.Close()
-	err = os.Rename(tempPath, destPath)
-	if err != nil {
-		api.SendTransferError(oid, 18, fmt.Sprintf("Error moving temp file to final location: %v", err), writer, errWriter)
+	if err := os.Rename(tempPath, destPath); err != nil {
 		os.Remove(tempPath)
-		return
+		return fmt.Errorf("Error moving temp file to final location: %v", err)
 	}
 
-	// completed
 	complete := &api.TransferResponse{Event: "complete", Oid: oid, Error: nil}
-	err = api.SendResponse(complete, writer, errWriter)
-	if err != nil {
+	if err := api.SendResponse(complete, writer, errWriter); err != nil {
 		util.WriteToStderr(fmt.Sprintf("Unable to send completion message: %v\n", err), errWriter)
 	}
-
+	return nil
 }
 
 func uploadViaAction(a *api.Action, fromPath string, size int64) error {
@@ -457,30 +514,18 @@ func uploadViaAction(a *api.Action, fromPath string, size int64) error {
 	return nil
 }
 
-func storeToRclone(destPath string, statFrom os.FileInfo, fromPath, oid string, writer, errWriter *bufio.Writer) {
+func storeToRclone(destPath string, statFrom os.FileInfo, fromPath, oid string) (bool, error) {
 	if size, err := statRclone(destPath); err == nil {
 		if size == statFrom.Size() {
-			util.WriteToStderr(fmt.Sprintf("Skipping %v, already stored", oid), errWriter)
-			api.SendProgress(oid, statFrom.Size(), int(statFrom.Size()), writer, errWriter)
-			complete := &api.TransferResponse{Event: "complete", Oid: oid, Error: nil}
-			if err := api.SendResponse(complete, writer, errWriter); err != nil {
-				util.WriteToStderr(fmt.Sprintf("Unable to send completion message: %v\n", err), errWriter)
-			}
-			return
+			return true, nil
 		}
 	}
 
 	cmd := util.NewCmd("rclone", "copyto", fromPath, destPath)
 	if err := cmd.Run(); err != nil {
-		api.SendTransferError(oid, 19, fmt.Sprintf("Error uploading %q via rclone: %v", oid, err), writer, errWriter)
-		return
+		return false, err
 	}
-
-	api.SendProgress(oid, statFrom.Size(), int(statFrom.Size()), writer, errWriter)
-	complete := &api.TransferResponse{Event: "complete", Oid: oid, Error: nil}
-	if err := api.SendResponse(complete, writer, errWriter); err != nil {
-		util.WriteToStderr(fmt.Sprintf("Unable to send completion message: %v\n", err), errWriter)
-	}
+	return false, nil
 }
 
 func statRclone(remote string) (int64, error) {
@@ -500,6 +545,18 @@ func statRclone(remote string) (int64, error) {
 		return 0, fmt.Errorf("file not found")
 	}
 	return entries[0].Size, nil
+}
+
+func runScript(script string, env map[string]string) error {
+	cmd := util.NewCmd("sh", "-c", script)
+	if runtime.GOOS == "windows" {
+		cmd = util.NewCmd("cmd", "/C", script)
+	}
+	cmd.Env = os.Environ()
+	for k, v := range env {
+		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
+	}
+	return cmd.Run()
 }
 
 func gitDir() (string, error) {
