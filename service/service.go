@@ -339,7 +339,7 @@ func copyFileContents(size int64, src, dst *os.File, cb copyCallback) error {
 	bytesLeft := size
 	for bytesLeft > 0 {
 		nextBlock := blockSize
-		if nextBlock < bytesLeft {
+		if nextBlock > bytesLeft {
 			nextBlock = bytesLeft
 		}
 		n, err := io.CopyN(dst, src, nextBlock)
