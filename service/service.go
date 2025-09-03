@@ -78,13 +78,15 @@ func storagePath(baseDir string, oid string) string {
 	return filepath.Join(fld, oid)
 }
 
-func downloadTempPath(gitDir string, oid string) string {
+func downloadTempPath(gitDir string, oid string) (string, error) {
 	// Download to a subfolder of repo so that git-lfs's final rename can work
 	// It won't work if TEMP is on another drive otherwise
 	// basedir is the objects/ folder, so use the tmp folder
 	tmpfld := filepath.Join(gitDir, "lfs", "tmp")
-	os.MkdirAll(tmpfld, os.ModePerm)
-	return filepath.Join(tmpfld, fmt.Sprintf("%v.tmp", oid))
+	if err := os.MkdirAll(tmpfld, os.ModePerm); err != nil {
+		return "", err
+	}
+	return filepath.Join(tmpfld, fmt.Sprintf("%v.tmp", oid)), nil
 }
 
 func retrieve(baseDir, gitDir, oid string, size int64, useAction bool, a *api.Action, writer, errWriter *bufio.Writer) {
@@ -198,7 +200,10 @@ func retrieveFromAction(a *api.Action, gitDir, oid string, size int64, writer, e
 
 func saveToTempFromReader(r io.Reader, size int64, gitDir, oid string, writer, errWriter *bufio.Writer) error {
 
-	dlfilename := downloadTempPath(gitDir, oid)
+	dlfilename, err := downloadTempPath(gitDir, oid)
+	if err != nil {
+		return fmt.Errorf("error creating temp dir: %v", err)
+	}
 	dlFile, err := os.OpenFile(dlfilename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		return fmt.Errorf("error creating temp file: %v", err)
