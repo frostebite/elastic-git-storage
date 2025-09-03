@@ -162,6 +162,76 @@ func TestUpload(t *testing.T) {
 
 }
 
+func TestUploadZip(t *testing.T) {
+
+	setup := setupUploadTest(t)
+	defer os.RemoveAll(setup.localpath)
+	defer os.RemoveAll(setup.remotepath)
+
+	base := "--compression=zip " + setup.remotepath
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	Serve(base, base, false, false, bytes.NewReader(setup.inputBuffer.Bytes()), &stdout, &stderr)
+
+	stdoutStr := stdout.String()
+	for _, file := range setup.files {
+		assert.Contains(t, stdoutStr, `{"event":"progress","oid":"`+file.oid)
+		assert.Contains(t, stdoutStr, `{"event":"complete","oid":"`+file.oid)
+
+		expectedPath := filepath.Join(setup.remotepath, file.oid[0:2], file.oid[2:4], file.oid+".zip")
+		assert.FileExistsf(t, expectedPath, "Store file must exist: %v", expectedPath)
+
+		zr, err := zip.OpenReader(expectedPath)
+		assert.Nil(t, err)
+		rc, err := zr.File[0].Open()
+		assert.Nil(t, err)
+		var buf bytes.Buffer
+		_, err = io.Copy(&buf, rc)
+		assert.Nil(t, err)
+		rc.Close()
+		zr.Close()
+		assert.Equal(t, file.size, int64(buf.Len()))
+		sum := sha256.Sum256(buf.Bytes())
+		assert.Equal(t, file.oid, hex.EncodeToString(sum[:]))
+	}
+}
+
+func TestUploadLz4(t *testing.T) {
+
+	setup := setupUploadTest(t)
+	defer os.RemoveAll(setup.localpath)
+	defer os.RemoveAll(setup.remotepath)
+
+	base := "--compression=lz4 " + setup.remotepath
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	Serve(base, base, false, false, bytes.NewReader(setup.inputBuffer.Bytes()), &stdout, &stderr)
+
+	stdoutStr := stdout.String()
+	for _, file := range setup.files {
+		assert.Contains(t, stdoutStr, `{"event":"progress","oid":"`+file.oid)
+		assert.Contains(t, stdoutStr, `{"event":"complete","oid":"`+file.oid)
+
+		expectedPath := filepath.Join(setup.remotepath, file.oid[0:2], file.oid[2:4], file.oid+".lz4")
+		assert.FileExistsf(t, expectedPath, "Store file must exist: %v", expectedPath)
+
+		f, err := os.Open(expectedPath)
+		assert.Nil(t, err)
+		lr := lz4.NewReader(f)
+		var buf bytes.Buffer
+		_, err = io.Copy(&buf, lr)
+		assert.Nil(t, err)
+		f.Close()
+		assert.Equal(t, file.size, int64(buf.Len()))
+		sum := sha256.Sum256(buf.Bytes())
+		assert.Equal(t, file.oid, hex.EncodeToString(sum[:]))
+	}
+}
+
 func TestUploadRclone(t *testing.T) {
 
 	setup := setupUploadTest(t)
@@ -381,7 +451,7 @@ func TestDownloadZip(t *testing.T) {
 	assert.Nil(t, err)
 	defer os.RemoveAll(emptyDir)
 
-	base := emptyDir + ";" + setup.remotepath
+	base := emptyDir + ";--compression=zip " + setup.remotepath
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -415,7 +485,7 @@ func TestDownloadLz4(t *testing.T) {
 	assert.Nil(t, err)
 	defer os.RemoveAll(emptyDir)
 
-	base := emptyDir + ";" + setup.remotepath
+	base := emptyDir + ";--compression=lz4 " + setup.remotepath
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -608,7 +678,7 @@ func TestRetrieveScript(t *testing.T) {
 
 	script := fmt.Sprintf("cp %s \"$DEST\"", srcFile)
 	oid := "123456"
-	err = tryRetrieveScript(script, gitDir, oid, int64(len(content)), writer, errWriter)
+	err = tryRetrieveScript(script, gitDir, oid, int64(len(content)), "", writer, errWriter)
 	assert.Nil(t, err)
 
 	dest, err := downloadTempPath(gitDir, oid)
@@ -640,7 +710,7 @@ func TestStoreScript(t *testing.T) {
 
 	oid := "abcdef"
 	script := fmt.Sprintf("cp \"$FROM\" %s/$OID", remoteDir)
-	err = storeUsingScript(script, oid, stat, fromPath, writer, errWriter)
+	err = storeUsingScript(script, "", oid, stat, fromPath, writer, errWriter)
 	assert.Nil(t, err)
 
 	dest := filepath.Join(remoteDir, oid)
