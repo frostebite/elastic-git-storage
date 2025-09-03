@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -587,6 +588,66 @@ func calculateFileHash(t *testing.T, filepath string) string {
 	return hex.EncodeToString(hasher.Sum(nil))
 }
 
+func TestRetrieveScript(t *testing.T) {
+	gitDir, err := ioutil.TempDir("", "gitdir")
+	assert.Nil(t, err)
+	defer os.RemoveAll(gitDir)
+
+	srcDir, err := ioutil.TempDir("", "src")
+	assert.Nil(t, err)
+	defer os.RemoveAll(srcDir)
+
+	srcFile := filepath.Join(srcDir, "file")
+	content := []byte("hello")
+	err = ioutil.WriteFile(srcFile, content, 0644)
+	assert.Nil(t, err)
+
+	var stdout, stderr bytes.Buffer
+	writer := bufio.NewWriter(&stdout)
+	errWriter := bufio.NewWriter(&stderr)
+
+	script := fmt.Sprintf("cp %s \"$DEST\"", srcFile)
+	oid := "123456"
+	err = tryRetrieveScript(script, gitDir, oid, int64(len(content)), writer, errWriter)
+	assert.Nil(t, err)
+
+	dest := downloadTempPath(gitDir, oid)
+	data, err := ioutil.ReadFile(dest)
+	assert.Nil(t, err)
+	assert.Equal(t, string(content), string(data))
+}
+
+func TestStoreScript(t *testing.T) {
+	remoteDir, err := ioutil.TempDir("", "remote")
+	assert.Nil(t, err)
+	defer os.RemoveAll(remoteDir)
+
+	localDir, err := ioutil.TempDir("", "local")
+	assert.Nil(t, err)
+	defer os.RemoveAll(localDir)
+
+	fromPath := filepath.Join(localDir, "file")
+	content := []byte("world")
+	err = ioutil.WriteFile(fromPath, content, 0644)
+	assert.Nil(t, err)
+	stat, err := os.Stat(fromPath)
+	assert.Nil(t, err)
+
+	var stdout, stderr bytes.Buffer
+	writer := bufio.NewWriter(&stdout)
+	errWriter := bufio.NewWriter(&stderr)
+
+	oid := "abcdef"
+	script := fmt.Sprintf("cp \"$FROM\" %s/$OID", remoteDir)
+	err = storeUsingScript(script, oid, stat, fromPath, writer, errWriter)
+	assert.Nil(t, err)
+
+	dest := filepath.Join(remoteDir, oid)
+	data, err := ioutil.ReadFile(dest)
+	assert.Nil(t, err)
+	assert.Equal(t, string(content), string(data))
+}
+
 func completionPaths(t *testing.T, stdout string) map[string]string {
 	paths := make(map[string]string)
 	scanner := bufio.NewScanner(strings.NewReader(stdout))
@@ -599,6 +660,18 @@ func completionPaths(t *testing.T, stdout string) map[string]string {
 		}
 	}
 	return paths
+}
+
+func TestServeHandlesLargeRequests(t *testing.T) {
+	padding := strings.Repeat("a", 70*1024)
+	req := fmt.Sprintf("{\"event\":\"terminate\",\"padding\":\"%s\"}\n", padding)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	Serve("", "", false, false, strings.NewReader(req), &stdout, &stderr)
+
+	assert.Contains(t, stderr.String(), "Terminating test custom adapter gracefully.")
 }
 
 func createZipFromFile(src, dest string) error {

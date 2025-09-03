@@ -1,18 +1,15 @@
-# flexible-large-storage - a git-lfs plugin
+<img width="1024" height="1024" alt="image" src="https://github.com/user-attachments/assets/69066daf-4851-41bb-8203-7c024e966149" />
+
+# elastic-git-storage
+a git-lfs plugin that enables convenient use of the cheapest, easiest, fastest and most secure storage providers. 
 > Forked from [lfs-folderstore](https://github.com/sinbad/lfs-folderstore) by Steve Streeting.
 
-
-> **No longer maintained**
-> Feel free to fork this repo if you like!
-
-[![Build status][1]][2]
-
-[1]: https://travis-ci.org/sinbad/lfs-folderstore.svg?branch=master
-[2]: https://travis-ci.org/sinbad/lfs-folderstore
+## Batteries included
+Fast and easy to setup. 
 
 ## What is it?
 
-`lfs-folderstore` is a [Custom Transfer
+a [Custom Transfer
 Agent](https://github.com/git-lfs/git-lfs/blob/master/docs/custom-transfers.md)
 for [Git LFS](https://git-lfs.github.com/) which allows you to use a plain
 folder as the remote storage location for all your large media files.
@@ -117,25 +114,37 @@ when you clone fresh. Here's the sequence:
   space by deleting a specific project, in the latter case you can save space if
   you have common files between projects (they'll have the same hash)
 
-### Advanced
+## Extended features
 
-* You can provide multiple folder paths separated by semicolons in the
-  configuration argument; each location will be searched in order until the
-  object is found.
-* Objects stored as `.zip` or `.lz4` files will be transparently decompressed
-  on download.
-* Paths prefixed with an [rclone](https://rclone.org) alias (e.g. `remote:path`)
-  are resolved via `rclone` so objects can be uploaded to or downloaded from
-  any rclone-supported backend.
-* Use the `--pullmain` flag to fall back to the standard LFS server for
-  downloads. Combine with `--pushmain` to mirror uploads there too. The older
-  `--useaction` flag still enables both for backwards compatibility.
-* Override the upload location separately from downloads with the `--pushdir`
-  flag, which may point to another folder or rclone remote.
-* Base directories and main-remote options may also be configured via git
-  config keys `lfs.folderstore.pull`, `lfs.folderstore.push`,
-  `lfs.folderstore.pullmain` and `lfs.folderstore.pushmain` which can be set
-  globally or per-repo.
+### Multiple storage locations
+Provide several folder paths separated by semicolons in the configuration argument. Each
+location is searched in order until the object is found.
+
+### Scripted transfers
+Prefix a location with `|` to run a shell script instead of using a directory. The script
+receives environment variables such as `OID`, `DEST` (for pulls) and `FROM` (for pushes),
+allowing custom transfer logic and prioritisation.
+
+### Transparent compression
+Objects stored as `.zip` or `.lz4` files are automatically decompressed on download.
+
+### rclone integration
+Paths prefixed with an [rclone](https://rclone.org) alias (e.g. `remote:path`) are resolved
+via `rclone`, enabling uploads to or downloads from any backend that rclone supports.
+
+### Mirroring to a main LFS server
+Use the `--pullmain` flag to fall back to the standard LFS server for downloads. Combine
+with `--pushmain` to mirror uploads there too. The older `--useaction` flag still enables
+both for backwards compatibility.
+
+### Separate upload destinations
+Override the upload location separately from downloads with the `--pushdir` flag, which
+may point to another folder or rclone remote.
+
+### Git configuration
+Base directories and main-remote options may also be configured via git config keys
+`lfs.folderstore.pull`, `lfs.folderstore.push`, `lfs.folderstore.pullmain` and
+`lfs.folderstore.pushmain` which can be set globally or per-repo.
 
 ## License (MIT)
 
