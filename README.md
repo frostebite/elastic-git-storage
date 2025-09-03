@@ -5,17 +5,9 @@ a git-lfs plugin that enables convenient use of the cheapest, easiest, fastest a
 ## Batteries included
 Fast and easy to setup. 
 
-> **No longer maintained**
-> Feel free to fork this repo if you like!
-
-[![Build status][1]][2]
-
-[1]: https://travis-ci.org/sinbad/lfs-folderstore.svg?branch=master
-[2]: https://travis-ci.org/sinbad/lfs-folderstore
-
 ## What is it?
 
-`lfs-folderstore` is a [Custom Transfer
+a [Custom Transfer
 Agent](https://github.com/git-lfs/git-lfs/blob/master/docs/custom-transfers.md)
 for [Git LFS](https://git-lfs.github.com/) which allows you to use a plain
 folder as the remote storage location for all your large media files.
