@@ -125,6 +125,10 @@ when you clone fresh. Here's the sequence:
 * You can provide multiple folder paths separated by semicolons in the
   configuration argument; each location will be searched in order until the
   object is found.
+* Prefix an entry with `|` to execute a shell script instead of using a
+  directory. The script is given environment variables such as `OID` and
+  `DEST` (for pulls) or `FROM` (for pushes) so you can implement custom
+  transfer behaviour and priority ordering.
 * Objects stored as `.zip` or `.lz4` files will be transparently decompressed
   on download.
 * Paths prefixed with an [rclone](https://rclone.org) alias (e.g. `remote:path`)
