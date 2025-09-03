@@ -23,7 +23,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"runtime"
 	"strconv"
 	"strings"
 
@@ -119,7 +118,7 @@ func rootCommand(cmd *cobra.Command, args []string) {
 		cmd.Usage()
 		os.Exit(1)
 	}
-	if !isRclonePath(pullDir) {
+	if !util.IsRclonePath(pullDir) {
 		stat, err := os.Stat(pullDir)
 		if err != nil || !stat.IsDir() {
 			os.Stderr.WriteString(fmt.Sprintf("%q does not exist or is not a directory", pullDir))
@@ -136,7 +135,7 @@ func rootCommand(cmd *cobra.Command, args []string) {
 	if push == "" {
 		push = pullDir
 	}
-	if !isRclonePath(push) {
+	if !util.IsRclonePath(push) {
 		stat, err := os.Stat(push)
 		if err != nil || !stat.IsDir() {
 			os.Stderr.WriteString(fmt.Sprintf("%q does not exist or is not a directory", push))
@@ -163,15 +162,6 @@ func rootCommand(cmd *cobra.Command, args []string) {
 	}
 
 	service.Serve(pullDir, push, pullMain, pushMain, os.Stdin, os.Stdout, os.Stderr)
-}
-
-func isRclonePath(path string) bool {
-	if runtime.GOOS == "windows" {
-		if len(path) >= 2 && path[1] == ':' {
-			return false
-		}
-	}
-	return strings.Contains(path, ":")
 }
 
 func getGitConfig(key string) string {
