@@ -1,4 +1,7 @@
-# Git LFS: Shared Folder agent
+# Git LFS: Shared Folder agen
+# flexible-large-storage
+> Forked from [lfs-folderstore](https://github.com/sinbad/lfs-folderstore) by Steve Streeting.
+
 
 > **No longer maintained**
 > Feel free to fork this repo if you like!
