@@ -138,9 +138,16 @@ git config --add lfs.customtransfer.lfs-folder.args "|./transfer.sh;/mnt/storage
 
 `transfer.sh` can read `$OID` to locate the object and copy it to `$DEST` or from `$FROM`.
 
-### Transparent compression
-Objects stored as `.zip` or `.lz4` files are automatically decompressed on download.
-Simply compress an object before uploading; no extra configuration is required.
+### Configurable compression
+Compression is not automatic. Specify the desired compression for each storage
+location via Git config. Supported formats are `zip`, `lz4`, or `none`.
+
+```bash
+git config --add lfs.customtransfer.lfs-folder.args "--compression=zip /mnt/storage"
+```
+
+Objects will be compressed on upload and decompressed on download according to the
+configured mode.
 
 ### rclone integration
 Paths prefixed with an [rclone](https://rclone.org) alias (e.g. `remote:path`) are resolved
