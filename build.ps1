@@ -28,7 +28,7 @@ function Zip-Release {
 }
 
 $package = "github.com/sinbad/lfs-folderstore"
-$archivename = "lfs-folderstore"
+$archivename = "elastic-git-storage"
 
 # Check dirty repo
 git diff --no-patch --exit-code
@@ -68,7 +68,7 @@ foreach ($BuildOS in $BuildConfigs.GetEnumerator()) {
 
         $env:GOOS=$($BuildOS.Name)
         $env:GOARCH=$Arch 
-        go build -ldflags "-X $package/cmd.Version=$Version" $package
+        go build -ldflags "-X $package/cmd.Version=$Version" -o elastic-git-storage $package
 
         Pop-Location
 

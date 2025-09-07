@@ -238,7 +238,7 @@ func TestUploadRclone(t *testing.T) {
 	defer os.RemoveAll(setup.localpath)
 	defer os.RemoveAll(setup.remotepath)
 
-	scriptDir, err := ioutil.TempDir(os.TempDir(), "lfs-folderstore-rclone")
+	scriptDir, err := ioutil.TempDir(os.TempDir(), "elastic-git-storage-rclone")
 	assert.Nil(t, err)
 	defer os.RemoveAll(scriptDir)
 
@@ -287,10 +287,10 @@ type testSetup struct {
 
 func setupUploadTest(t *testing.T) *testSetup {
 	// Create 2 temporary dirs, pretending to be git repo and dest shared folder
-	gitpath, err := ioutil.TempDir(os.TempDir(), "lfs-folderstore-test-local")
+	gitpath, err := ioutil.TempDir(os.TempDir(), "elastic-git-storage-test-local")
 	assert.Nil(t, err, "Error creating temp git path")
 
-	storepath, err := ioutil.TempDir(os.TempDir(), "lfs-folderstore-test-remote")
+	storepath, err := ioutil.TempDir(os.TempDir(), "elastic-git-storage-test-remote")
 	assert.Nil(t, err, "Error creating temp shared path")
 
 	testfiles := []testFile{
@@ -412,7 +412,7 @@ func TestDownloadFallback(t *testing.T) {
 	defer os.RemoveAll(setup.localpath)
 	defer os.RemoveAll(setup.remotepath)
 
-	emptyDir, err := ioutil.TempDir(os.TempDir(), "lfs-folderstore-empty")
+	emptyDir, err := ioutil.TempDir(os.TempDir(), "elastic-git-storage-empty")
 	assert.Nil(t, err)
 	defer os.RemoveAll(emptyDir)
 
@@ -447,7 +447,7 @@ func TestDownloadZip(t *testing.T) {
 		setup.files[i].path = zipPath
 	}
 
-	emptyDir, err := ioutil.TempDir(os.TempDir(), "lfs-folderstore-empty")
+	emptyDir, err := ioutil.TempDir(os.TempDir(), "elastic-git-storage-empty")
 	assert.Nil(t, err)
 	defer os.RemoveAll(emptyDir)
 
@@ -481,7 +481,7 @@ func TestDownloadLz4(t *testing.T) {
 		setup.files[i].path = lz4Path
 	}
 
-	emptyDir, err := ioutil.TempDir(os.TempDir(), "lfs-folderstore-empty")
+	emptyDir, err := ioutil.TempDir(os.TempDir(), "elastic-git-storage-empty")
 	assert.Nil(t, err)
 	defer os.RemoveAll(emptyDir)
 
@@ -508,7 +508,7 @@ func TestDownloadRclone(t *testing.T) {
 	defer os.RemoveAll(setup.localpath)
 	defer os.RemoveAll(setup.remotepath)
 
-	scriptDir, err := ioutil.TempDir(os.TempDir(), "lfs-folderstore-rclone")
+	scriptDir, err := ioutil.TempDir(os.TempDir(), "elastic-git-storage-rclone")
 	assert.Nil(t, err)
 	defer os.RemoveAll(scriptDir)
 
@@ -564,10 +564,10 @@ func finishDownload(buf *bytes.Buffer) {
 
 func setupDownloadTest(t *testing.T) *testSetup {
 	// Create 2 temporary dirs, pretending to be git repo and dest shared folder
-	gitpath, err := ioutil.TempDir(os.TempDir(), "lfs-folderstore-test-local")
+	gitpath, err := ioutil.TempDir(os.TempDir(), "elastic-git-storage-test-local")
 	assert.Nil(t, err, "Error creating temp git path")
 
-	storepath, err := ioutil.TempDir(os.TempDir(), "lfs-folderstore-test-remote")
+	storepath, err := ioutil.TempDir(os.TempDir(), "elastic-git-storage-test-remote")
 	assert.Nil(t, err, "Error creating temp shared path")
 
 	testfiles := []testFile{

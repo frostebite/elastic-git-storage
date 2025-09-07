@@ -58,7 +58,7 @@ func Serve(pullBaseDir, pushBaseDir string, usePullAction, usePushAction bool, s
 			if len(pullBaseDir) == 0 {
 				resp.Error = &api.TransferError{Code: 9, Message: "Base directory not specified, check config"}
 			} else {
-				util.WriteToStderr(fmt.Sprintf("Initialised lfs-folderstore custom adapter for %s\n", req.Operation), errWriter)
+				util.WriteToStderr(fmt.Sprintf("Initialised elastic-git-storage custom adapter for %s\n", req.Operation), errWriter)
 			}
 			api.SendResponse(resp, writer, errWriter)
 		case "download":
@@ -627,7 +627,7 @@ func storeToRclone(destPath, compression string, statFrom os.FileInfo, fromPath,
 	var tmp *os.File
 	var err error
 	if compression == "zip" || compression == "lz4" {
-		tmp, err = os.CreateTemp("", "lfs-folderstore")
+		tmp, err = os.CreateTemp("", "elastic-git-storage")
 		if err != nil {
 			return false, err
 		}
