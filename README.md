@@ -1,7 +1,12 @@
 <img width="1024" height="1024" alt="image" src="https://github.com/user-attachments/assets/69066daf-4851-41bb-8203-7c024e966149" />
 
 # elastic-git-storage
-a git-lfs plugin that enables convenient use of the cheapest, easiest, fastest and most secure storage providers. 
+A git-lfs plugin that allows you to conveniently use any popular storage providers (Google Drive, AWS, Azure, local drive) alongside normal git providers like GitHub by storing "LFS" large files in a configurable storage location
+ - Store any of your LFS files in any storage provider rclone supports https://rclone.org/overview/
+ - Whether you're a big team or a small team, the flexibility and unbeatable prices this flexibility enables can liberate your projects from costly providers.
+ - Great for game development or any project that uses large files.
+
+
 > Forked from [lfs-folderstore](https://github.com/sinbad/lfs-folderstore) by Steve Streeting.
 
 ## Batteries included
