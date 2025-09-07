@@ -54,9 +54,9 @@ func Execute() {
 
 func init() {
 	RootCmd = &cobra.Command{
-		Use:   "lfs-folderstore",
+		Use:   "elastic-git-storage",
 		Short: "git-lfs custom transfer adapter to store all data in a folder",
-		Long: `lfs-folderstore treats a simple folder, probably a shared one,
+		Long: `elastic-git-storage treats a simple folder, probably a shared one,
 		as the remote store for all LFS object data. Upload and download functions
 		are turned into simple file copies to destinations determined by the id
 		of the object.`,
@@ -76,7 +76,7 @@ func init() {
 func usageCommand(cmd *cobra.Command) error {
 	usage := `
 Usage:
-  lfs-folderstore [options] <basedir>
+  elastic-git-storage [options] <basedir>
 
 Arguments:
   basedir      Base directory for the object store (required)
@@ -101,7 +101,7 @@ Note:
 func rootCommand(cmd *cobra.Command, args []string) {
 
 	if printVersion {
-		os.Stderr.WriteString(fmt.Sprintf("lfs-folder %v\n", Version))
+		os.Stderr.WriteString(fmt.Sprintf("elastic-git-storage %v\n", Version))
 		os.Exit(0)
 	}
 

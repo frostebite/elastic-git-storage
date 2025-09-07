@@ -42,10 +42,10 @@ with 2.5.2 and 2.6.0 (and with Git 2.19.1).
 
 ### Download &amp; install
 
-You will need `lfs-folderstore[.exe]` to be on your system path somewhere.
+You will need `elastic-git-storage[.exe]` to be on your system path somewhere.
 
 Either download and extract the [latest
-release](https://github.com/sinbad/lfs-folderstore/releases), or build it from
+release](https://github.com/sinbad/elastic-git-storage/releases), or build it from
 source using the standard `go build`.
 
 ### Configure a fresh repo
@@ -56,7 +56,7 @@ Starting a new repository is the easiest case.
 * Create some commits with LFS binaries
 * Add your plain git remote using `git remote add origin <url>`
 * Run these commands to configure your LFS folder:
-  * `git config --add lfs.customtransfer.lfs-folder.path lfs-folderstore`
+  * `git config --add lfs.customtransfer.lfs-folder.path elastic-git-storage`
   * `git config --add lfs.customtransfer.lfs-folder.args "C:/path/to/your/folder"`
   * `git config --add lfs.standalonetransferagent lfs-folder`
 * `git push origin master` will now copy any media to that folder
@@ -77,7 +77,7 @@ you want to either move to a folder, or replicate, it's a little more complicate
 
 * Create a new remote using `git remote add folderremote <url>`. Do this even if you want to keep the git repo at the same URL as currently.
 * Run these commands to configure the folder store:
-  * `git config --add lfs.customtransfer.lfs-folder.path lfs-folderstore`
+  * `git config --add lfs.customtransfer.lfs-folder.path elastic-git-storage`
   * `git config --add lfs.customtransfer.lfs-folder.args "C:/path/to/your/folder"`
   * `git config --add lfs.<url>.standalonetransferagent lfs-folder` - important: use the new Git repo URL
 * `git push folderremote master ...` - important: list all branches you wish to keep LFS content for. Only LFS content which is reachable from the branches you list (at any version) will be copied to the remote
@@ -96,7 +96,7 @@ when you clone fresh. Here's the sequence:
     * this will work for the git data, but will report "Error downloading object" when trying to get LFS data
 * `cd <folder>` - to enter your newly cloned repo
 * Configure as with a new repo:
-  * `git config --add lfs.customtransfer.lfs-folder.path lfs-folderstore`
+  * `git config --add lfs.customtransfer.lfs-folder.path elastic-git-storage`
   * `git config --add lfs.customtransfer.lfs-folder.args "C:/path/to/your/folder"`
   * `git config --add lfs.standalonetransferagent lfs-folder`
 * `git reset --hard master`
