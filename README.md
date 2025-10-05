@@ -1,4 +1,5 @@
-<img width="1024" height="1024" alt="image" src="https://github.com/user-attachments/assets/69066daf-4851-41bb-8203-7c024e966149" />
+<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/a42d0758-2c7b-4993-9345-fd47a3e558f1" />
+
 
 # elastic-git-storage
 A git-lfs plugin that allows you to conveniently use any popular storage providers (Google Drive, AWS, Azure, local drive) alongside normal git providers like GitHub by storing "LFS" large files in a configurable storage location
