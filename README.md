@@ -9,7 +9,7 @@ A git-lfs plugin that allows you to conveniently use any popular storage provide
  - Great for game development or any project that uses large files.
 
 
-> Forked from [lfs-folderstore](https://github.com/sinbad/lfs-folderstore) by Steve Streeting.
+> Forked from [lfs-folderstore]([https://github.com/sinbad/lfs-folderstore](https://github.com/frostebite/elastic-git-storage/releases)) by Steve Streeting.
 
 ## Batteries included
 Fast and easy to setup. 
