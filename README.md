@@ -18,7 +18,7 @@ Fast and easy to setup.
 a [Custom Transfer
 Agent](https://github.com/git-lfs/git-lfs/blob/master/docs/custom-transfers.md)
 for [Git LFS](https://git-lfs.github.com/) which allows you to use a plain
-folder as the remote storage location for all your large media files.
+folder, scripted push/pull or any RClone storage as the remote storage location for all your large media files.
 
 ## Why?
 
