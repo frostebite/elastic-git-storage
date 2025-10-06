@@ -9,7 +9,7 @@ A git-lfs plugin that allows you to conveniently use any popular storage provide
  - Great for game development or any project that uses large files.
 
 
-> Forked from [lfs-folderstore]([https://github.com/sinbad/lfs-folderstore](https://github.com/frostebite/elastic-git-storage/releases)) by Steve Streeting.
+> Forked from [lfs-folderstore](https://github.com/sinbad/lfs-folderstore) by Steve Streeting.
 
 ## Batteries included
 Fast and easy to setup. 
@@ -52,7 +52,7 @@ with 2.5.2 and 2.6.0 (and with Git 2.19.1).
 You will need `elastic-git-storage[.exe]` to be on your system path somewhere.
 
 Either download and extract the [latest
-release](https://github.com/sinbad/elastic-git-storage/releases), or build it from
+release](https://github.com/frostebite/elastic-git-storage/releases), or build it from
 source using the standard `go build`.
 
 ### Configure a fresh repo
