@@ -1,4 +1,5 @@
-<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/a42d0758-2c7b-4993-9345-fd47a3e558f1" />
+<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/a3d23132-f275-4843-9ade-f3a6decd4f88" />
+
 
 
 # elastic-git-storage
