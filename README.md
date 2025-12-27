@@ -44,8 +44,7 @@ Dropbox, or Synology Cloud Drive etc.
 
 ### Prerequisites
 
-You need to be running Git LFS version 2.3.0 or later. This has been tested
-with 2.5.2 and 2.6.0 (and with Git 2.19.1).
+You need to be running Git LFS version 2.3.0 or later.
 
 ### Download &amp; install
 
@@ -63,16 +62,16 @@ Starting a new repository is the easiest case.
 * Create some commits with LFS binaries
 * Add your plain git remote using `git remote add origin <url>`
 * Run these commands to configure your LFS folder:
-  * `git config --add lfs.customtransfer.lfs-folder.path elastic-git-storage`
-  * `git config --add lfs.customtransfer.lfs-folder.args "C:/path/to/your/folder"`
-  * `git config --add lfs.standalonetransferagent lfs-folder`
+  * `git config --add lfs.customtransfer.elastic-git-storage.path elastic-git-storage`
+  * `git config --add lfs.customtransfer.elastic-git-storage.args "C:/path/to/your/folder"`
+  * `git config --add lfs.standalonetransferagent elastic-git-storage`
 * `git push origin master` will now copy any media to that folder
 
 A few things to note:
 
 * As shown, if on Windows, use forward slashes for path separators
 * If you have spaces in your path, add **additional single quotes** around the path
-    * e.g. `git config --add lfs.customtransfer.lfs-folder.args "'C:/path with spaces/folder'"`
+    * e.g. `git config --add lfs.customtransfer.elastic-git-storage.args "'C:/path with spaces/folder'"`
 * The `standalonetransferagent` forced Git LFS to use the folder agent for all
   pushes and pulls. If you want to use another remote which uses the standard
   LFS API, you should see the next section.
@@ -84,9 +83,9 @@ you want to either move to a folder, or replicate, it's a little more complicate
 
 * Create a new remote using `git remote add folderremote <url>`. Do this even if you want to keep the git repo at the same URL as currently.
 * Run these commands to configure the folder store:
-  * `git config --add lfs.customtransfer.lfs-folder.path elastic-git-storage`
-  * `git config --add lfs.customtransfer.lfs-folder.args "C:/path/to/your/folder"`
-  * `git config --add lfs.<url>.standalonetransferagent lfs-folder` - important: use the new Git repo URL
+  * `git config --add lfs.customtransfer.elastic-git-storage.path elastic-git-storage`
+  * `git config --add lfs.customtransfer.elastic-git-storage.args "C:/path/to/your/folder"`
+  * `git config --add lfs.<url>.standalonetransferagent elastic-git-storage` - important: use the new Git repo URL
 * `git push folderremote master ...` - important: list all branches you wish to keep LFS content for. Only LFS content which is reachable from the branches you list (at any version) will be copied to the remote
 
 ### Cloning a repo
@@ -103,11 +102,37 @@ when you clone fresh. Here's the sequence:
     * this will work for the git data, but will report "Error downloading object" when trying to get LFS data
 * `cd <folder>` - to enter your newly cloned repo
 * Configure as with a new repo:
-  * `git config --add lfs.customtransfer.lfs-folder.path elastic-git-storage`
-  * `git config --add lfs.customtransfer.lfs-folder.args "C:/path/to/your/folder"`
-  * `git config --add lfs.standalonetransferagent lfs-folder`
+  * `git config --add lfs.customtransfer.elastic-git-storage.path elastic-git-storage`
+  * `git config --add lfs.customtransfer.elastic-git-storage.args "C:/path/to/your/folder"`
+  * `git config --add lfs.standalonetransferagent elastic-git-storage`
 * `git reset --hard master`
   * This will sort out the LFS files in your checkout and copy the content from the now-configured shared folder
+
+### Command-line usage and flag precedence
+
+You can run the binary directly (Git LFS does this under the hood). Flags mirror the tool's usage output:
+
+```
+Usage:
+  elastic-git-storage [options] <basedir>
+
+Arguments:
+  basedir      Base directory for the object store (required unless provided via config)
+
+Options:
+  --basedir, -d   Base directory for downloads; overrides positional arg and git config
+  --pushdir, -p   Optional base directory for uploads; defaults to basedir if omitted
+  --useaction     Also perform transfers using LFS-provided actions (deprecated)
+  --pullmain      Allow fallback pulling from main LFS remote
+  --pushmain      Also push to main LFS remote
+  --version       Report the version number and exit
+
+Notes:
+  - Pull path precedence: --basedir flag > positional argument > git config lfs.folderstore.pull
+  - Push path precedence: --pushdir flag > git config lfs.folderstore.push > resolved pull path
+  - Main-remote fallbacks: flags override git config lfs.folderstore.pullmain / lfs.folderstore.pushmain
+  - Custom transfer arguments are normally set via git config at lfs.customtransfer.<name>.args
+```
 
 ## Notes
 
@@ -130,7 +155,7 @@ Provide several folder paths separated by semicolons in the configuration argume
 location is searched in order until the object is found.
 
 ```bash
-git config --add lfs.customtransfer.lfs-folder.args \
+git config --add lfs.customtransfer.elastic-git-storage.args \
   "D:/fast-cache;/mnt/slow-storage"
 ```
 
@@ -140,7 +165,7 @@ receives environment variables such as `OID`, `DEST` (for pulls), `FROM` (for pu
 `SIZE`, allowing custom transfer logic and prioritisation.
 
 ```bash
-git config --add lfs.customtransfer.lfs-folder.args "|./transfer.sh;/mnt/storage"
+git config --add lfs.customtransfer.elastic-git-storage.args "|./transfer.sh;/mnt/storage"
 ```
 
 `transfer.sh` can read `$OID` to locate the object and copy it to `$DEST` or from `$FROM`.
@@ -150,7 +175,7 @@ Compression is not automatic. Specify the desired compression for each storage
 location via Git config. Supported formats are `zip`, `lz4`, or `none`.
 
 ```bash
-git config --add lfs.customtransfer.lfs-folder.args "--compression=zip /mnt/storage"
+git config --add lfs.customtransfer.elastic-git-storage.args "--compression=zip /mnt/storage"
 ```
 
 Objects will be compressed on upload and decompressed on download according to the
@@ -161,7 +186,7 @@ Paths prefixed with an [rclone](https://rclone.org) alias (e.g. `remote:path`) a
 via `rclone`, enabling uploads to or downloads from any backend that rclone supports.
 
 ```bash
-git config --add lfs.customtransfer.lfs-folder.args "remote:bucket/path"
+git config --add lfs.customtransfer.elastic-git-storage.args "remote:bucket/path"
 ```
 
 ### Mirroring to a main LFS server
@@ -170,7 +195,7 @@ with `--pushmain` to mirror uploads there too. The older `--useaction` flag stil
 both for backwards compatibility.
 
 ```bash
-git config --add lfs.customtransfer.lfs-folder.args \
+git config --add lfs.customtransfer.elastic-git-storage.args \
   "--pullmain --pushmain /mnt/lfs-folder"
 ```
 
@@ -179,7 +204,7 @@ Override the upload location separately from downloads with the `--pushdir` flag
 may point to another folder or rclone remote.
 
 ```bash
-git config --add lfs.customtransfer.lfs-folder.args \
+git config --add lfs.customtransfer.elastic-git-storage.args \
   "--pushdir /mnt/upload /mnt/download"
 ```
 
@@ -195,7 +220,7 @@ git config --global lfs.folderstore.pullmain true
 git config --global lfs.folderstore.pushmain true
 ```
 
-These settings remove the need to pass arguments in `lfs.customtransfer.lfs-folder.args`.
+These settings remove the need to pass arguments in `lfs.customtransfer.elastic-git-storage.args`.
 
 ## License
 
