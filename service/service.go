@@ -477,14 +477,29 @@ func store(baseDir string, oid string, size int64, useAction bool, writeAll bool
 				err = storeToDir(d.path, d.compression, oid, statFrom, fromPath, true, writer, errWriter)
 			}
 			if err != nil {
-				util.WriteToStderr(fmt.Sprintf("Warning: failed to store %v to %v: %v\n", oid, d.path, err), errWriter)
+				if util.IsRclonePath(d.path) {
+					util.WriteToStderr(fmt.Sprintf("WARNING: Failed to write to %v: %v. If this is a WebDAV remote, the dynamic platform address may need refreshing. Run: automation/RefreshRcloneTunnelUrl.ps1 or use the Unity Editor 'Refresh Tunnel URL' button.\n", d.path, err), errWriter)
+				} else {
+					util.WriteToStderr(fmt.Sprintf("Warning: failed to store %v to %v: %v\n", oid, d.path, err), errWriter)
+				}
 				lastErr = err
 			} else {
 				anySuccess = true
 			}
 		}
 		if !anySuccess {
-			api.SendTransferError(oid, 20, fmt.Sprintf("Unable to store %q to any destination: %v", oid, lastErr), writer, errWriter)
+			errMsg := fmt.Sprintf("Unable to store %q to any destination: %v", oid, lastErr)
+			hasRcloneDest := false
+			for _, d := range dirs {
+				if util.IsRclonePath(d.path) {
+					hasRcloneDest = true
+					break
+				}
+			}
+			if hasRcloneDest {
+				util.WriteToStderr("WARNING: All destinations failed and at least one was an rclone/WebDAV remote. The dynamic platform address may need refreshing. Run: automation/RefreshRcloneTunnelUrl.ps1 or use the Unity Editor 'Refresh Tunnel URL' button.\n", errWriter)
+			}
+			api.SendTransferError(oid, 20, errMsg, writer, errWriter)
 			return
 		}
 		// Send one completion message for the successful fan-out
@@ -509,6 +524,16 @@ func store(baseDir string, oid string, size int64, useAction bool, writeAll bool
 			return
 		}
 		lastErr = err
+	}
+	hasRcloneDest := false
+	for _, d := range dirs {
+		if util.IsRclonePath(d.path) {
+			hasRcloneDest = true
+			break
+		}
+	}
+	if hasRcloneDest {
+		util.WriteToStderr("WARNING: All destinations failed and at least one was an rclone/WebDAV remote. The dynamic platform address may need refreshing. Run: automation/RefreshRcloneTunnelUrl.ps1 or use the Unity Editor 'Refresh Tunnel URL' button.\n", errWriter)
 	}
 	api.SendTransferError(oid, 20, fmt.Sprintf("Unable to store %q: %v", oid, lastErr), writer, errWriter)
 }
