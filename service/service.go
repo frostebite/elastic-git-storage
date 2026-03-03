@@ -28,7 +28,7 @@ type baseDirConfig struct {
 // Serve starts the protocol server
 // usePullAction/usePushAction indicate whether to fall back to LFS actions
 // for downloads and uploads respectively.
-func Serve(pullBaseDir, pushBaseDir string, usePullAction, usePushAction bool, stdin io.Reader, stdout, stderr io.Writer) {
+func Serve(pullBaseDir, pushBaseDir string, usePullAction, usePushAction, writeAll bool, stdin io.Reader, stdout, stderr io.Writer) {
 
 	scanner := bufio.NewScanner(stdin)
 	// Allow requests larger than the default 64 KB limit by raising the
@@ -69,7 +69,7 @@ func Serve(pullBaseDir, pushBaseDir string, usePullAction, usePushAction bool, s
 			if len(pushBaseDir) == 0 {
 				pushBaseDir = pullBaseDir
 			}
-			store(pushBaseDir, req.Oid, req.Size, usePushAction, req.Action, req.Path, writer, errWriter)
+			store(pushBaseDir, req.Oid, req.Size, usePushAction, writeAll, req.Action, req.Path, writer, errWriter)
 		case "terminate":
 			util.WriteToStderr("Terminating test custom adapter gracefully.\n", errWriter)
 			break
@@ -449,7 +449,7 @@ func compressToLz4(src *os.File, dst *os.File, size int64, cb copyCallback) erro
 	return nil
 }
 
-func store(baseDir string, oid string, size int64, useAction bool, a *api.Action, fromPath string, writer, errWriter *bufio.Writer) {
+func store(baseDir string, oid string, size int64, useAction bool, writeAll bool, a *api.Action, fromPath string, writer, errWriter *bufio.Writer) {
 	statFrom, err := os.Stat(fromPath)
 	if err != nil {
 		api.SendTransferError(oid, 13, fmt.Sprintf("Cannot stat %q: %v", fromPath, err), writer, errWriter)
@@ -464,13 +464,46 @@ func store(baseDir string, oid string, size int64, useAction bool, a *api.Action
 	}
 
 	dirs := splitBaseDirs(baseDir)
+
+	if writeAll {
+		// Fan-out: write to ALL destinations, succeed if at least one works
+		anySuccess := false
+		var lastErr error
+		for _, d := range dirs {
+			var err error
+			if d.script {
+				err = storeUsingScript(d.path, d.compression, oid, statFrom, fromPath, true, writer, errWriter)
+			} else {
+				err = storeToDir(d.path, d.compression, oid, statFrom, fromPath, true, writer, errWriter)
+			}
+			if err != nil {
+				util.WriteToStderr(fmt.Sprintf("Warning: failed to store %v to %v: %v\n", oid, d.path, err), errWriter)
+				lastErr = err
+			} else {
+				anySuccess = true
+			}
+		}
+		if !anySuccess {
+			api.SendTransferError(oid, 20, fmt.Sprintf("Unable to store %q to any destination: %v", oid, lastErr), writer, errWriter)
+			return
+		}
+		// Send one completion message for the successful fan-out
+		api.SendProgress(oid, statFrom.Size(), int(statFrom.Size()), writer, errWriter)
+		complete := &api.TransferResponse{Event: "complete", Oid: oid, Error: nil}
+		if err := api.SendResponse(complete, writer, errWriter); err != nil {
+			util.WriteToStderr(fmt.Sprintf("Unable to send completion message: %v\n", err), errWriter)
+		}
+		return
+	}
+
+	// Fail-over: stop on first success (original behavior)
 	var lastErr error
 	for _, d := range dirs {
 		var err error
 		if d.script {
-			err = storeUsingScript(d.path, d.compression, oid, statFrom, fromPath, writer, errWriter)
+			err = storeUsingScript(d.path, d.compression, oid, statFrom, fromPath, false, writer, errWriter)
 		} else {
-			err = storeToDir(d.path, d.compression, oid, statFrom, fromPath, writer, errWriter)
+			err = storeToDir(d.path, d.compression, oid, statFrom, fromPath, false, writer, errWriter)
 		}
 		if err == nil {
 			return
@@ -480,7 +513,7 @@ func store(baseDir string, oid string, size int64, useAction bool, a *api.Action
 	api.SendTransferError(oid, 20, fmt.Sprintf("Unable to store %q: %v", oid, lastErr), writer, errWriter)
 }
 
-func storeUsingScript(script string, compression string, oid string, statFrom os.FileInfo, fromPath string, writer, errWriter *bufio.Writer) error {
+func storeUsingScript(script string, compression string, oid string, statFrom os.FileInfo, fromPath string, silent bool, writer, errWriter *bufio.Writer) error {
 	env := map[string]string{
 		"OID":  oid,
 		"FROM": fromPath,
@@ -492,15 +525,17 @@ func storeUsingScript(script string, compression string, oid string, statFrom os
 	if err := runScript(script, env); err != nil {
 		return err
 	}
-	api.SendProgress(oid, statFrom.Size(), int(statFrom.Size()), writer, errWriter)
-	complete := &api.TransferResponse{Event: "complete", Oid: oid, Error: nil}
-	if err := api.SendResponse(complete, writer, errWriter); err != nil {
-		util.WriteToStderr(fmt.Sprintf("Unable to send completion message: %v\n", err), errWriter)
+	if !silent {
+		api.SendProgress(oid, statFrom.Size(), int(statFrom.Size()), writer, errWriter)
+		complete := &api.TransferResponse{Event: "complete", Oid: oid, Error: nil}
+		if err := api.SendResponse(complete, writer, errWriter); err != nil {
+			util.WriteToStderr(fmt.Sprintf("Unable to send completion message: %v\n", err), errWriter)
+		}
 	}
 	return nil
 }
 
-func storeToDir(baseDir, compression string, oid string, statFrom os.FileInfo, fromPath string, writer, errWriter *bufio.Writer) error {
+func storeToDir(baseDir, compression string, oid string, statFrom os.FileInfo, fromPath string, silent bool, writer, errWriter *bufio.Writer) error {
 	destPath := storagePath(baseDir, oid)
 	switch compression {
 	case "zip":
@@ -516,10 +551,12 @@ func storeToDir(baseDir, compression string, oid string, statFrom os.FileInfo, f
 		if already {
 			util.WriteToStderr(fmt.Sprintf("Skipping %v, already stored", oid), errWriter)
 		}
-		api.SendProgress(oid, statFrom.Size(), int(statFrom.Size()), writer, errWriter)
-		complete := &api.TransferResponse{Event: "complete", Oid: oid, Error: nil}
-		if err := api.SendResponse(complete, writer, errWriter); err != nil {
-			util.WriteToStderr(fmt.Sprintf("Unable to send completion message: %v\n", err), errWriter)
+		if !silent {
+			api.SendProgress(oid, statFrom.Size(), int(statFrom.Size()), writer, errWriter)
+			complete := &api.TransferResponse{Event: "complete", Oid: oid, Error: nil}
+			if err := api.SendResponse(complete, writer, errWriter); err != nil {
+				util.WriteToStderr(fmt.Sprintf("Unable to send completion message: %v\n", err), errWriter)
+			}
 		}
 		return nil
 	}
@@ -527,10 +564,12 @@ func storeToDir(baseDir, compression string, oid string, statFrom os.FileInfo, f
 	statDest, err := os.Stat(destPath)
 	if err == nil && compression == "none" && statFrom.Size() == statDest.Size() {
 		util.WriteToStderr(fmt.Sprintf("Skipping %v, already stored", oid), errWriter)
-		api.SendProgress(oid, statFrom.Size(), int(statFrom.Size()), writer, errWriter)
-		complete := &api.TransferResponse{Event: "complete", Oid: oid, Error: nil}
-		if err := api.SendResponse(complete, writer, errWriter); err != nil {
-			util.WriteToStderr(fmt.Sprintf("Unable to send completion message: %v\n", err), errWriter)
+		if !silent {
+			api.SendProgress(oid, statFrom.Size(), int(statFrom.Size()), writer, errWriter)
+			complete := &api.TransferResponse{Event: "complete", Oid: oid, Error: nil}
+			if err := api.SendResponse(complete, writer, errWriter); err != nil {
+				util.WriteToStderr(fmt.Sprintf("Unable to send completion message: %v\n", err), errWriter)
+			}
 		}
 		return nil
 	}
@@ -557,9 +596,12 @@ func storeToDir(baseDir, compression string, oid string, statFrom os.FileInfo, f
 		return fmt.Errorf("Cannot open temp file for writing %q: %v", tempPath, err)
 	}
 
-	cb := func(totalSize, readSoFar int64, readSinceLast int) error {
-		api.SendProgress(oid, readSoFar, readSinceLast, writer, errWriter)
-		return nil
+	var cb copyCallback
+	if !silent {
+		cb = func(totalSize, readSoFar int64, readSinceLast int) error {
+			api.SendProgress(oid, readSoFar, readSinceLast, writer, errWriter)
+			return nil
+		}
 	}
 
 	var copyErr error
@@ -583,9 +625,11 @@ func storeToDir(baseDir, compression string, oid string, statFrom os.FileInfo, f
 		return fmt.Errorf("Error moving temp file to final location: %v", err)
 	}
 
-	complete := &api.TransferResponse{Event: "complete", Oid: oid, Error: nil}
-	if err := api.SendResponse(complete, writer, errWriter); err != nil {
-		util.WriteToStderr(fmt.Sprintf("Unable to send completion message: %v\n", err), errWriter)
+	if !silent {
+		complete := &api.TransferResponse{Event: "complete", Oid: oid, Error: nil}
+		if err := api.SendResponse(complete, writer, errWriter); err != nil {
+			util.WriteToStderr(fmt.Sprintf("Unable to send completion message: %v\n", err), errWriter)
+		}
 	}
 	return nil
 }

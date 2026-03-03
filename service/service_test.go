@@ -102,7 +102,7 @@ func TestUpload(t *testing.T) {
 	var stderr bytes.Buffer
 
 	// Perform entire sequence
-	Serve(setup.remotepath, setup.remotepath, false, false, bytes.NewReader(setup.inputBuffer.Bytes()), &stdout, &stderr)
+	Serve(setup.remotepath, setup.remotepath, false, false, false, bytes.NewReader(setup.inputBuffer.Bytes()), &stdout, &stderr)
 
 	// Check reported progress and completion
 	stdoutStr := stdout.String()
@@ -132,7 +132,7 @@ func TestUpload(t *testing.T) {
 	setup2 := setupUploadTest2(t, setup.localpath, setup.remotepath)
 	stdout.Reset()
 	stderr.Reset()
-	Serve(setup2.remotepath, setup2.remotepath, false, false, bytes.NewReader(setup2.inputBuffer.Bytes()), &stdout, &stderr)
+	Serve(setup2.remotepath, setup2.remotepath, false, false, false, bytes.NewReader(setup2.inputBuffer.Bytes()), &stdout, &stderr)
 
 	stdoutStr = stdout.String()
 	stderrStr := stderr.String()
@@ -173,7 +173,7 @@ func TestUploadZip(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	Serve(base, base, false, false, bytes.NewReader(setup.inputBuffer.Bytes()), &stdout, &stderr)
+	Serve(base, base, false, false, false, bytes.NewReader(setup.inputBuffer.Bytes()), &stdout, &stderr)
 
 	stdoutStr := stdout.String()
 	for _, file := range setup.files {
@@ -209,7 +209,7 @@ func TestUploadLz4(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	Serve(base, base, false, false, bytes.NewReader(setup.inputBuffer.Bytes()), &stdout, &stderr)
+	Serve(base, base, false, false, false, bytes.NewReader(setup.inputBuffer.Bytes()), &stdout, &stderr)
 
 	stdoutStr := stdout.String()
 	for _, file := range setup.files {
@@ -255,7 +255,7 @@ func TestUploadRclone(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	Serve(base, base, false, false, bytes.NewReader(setup.inputBuffer.Bytes()), &stdout, &stderr)
+	Serve(base, base, false, false, false, bytes.NewReader(setup.inputBuffer.Bytes()), &stdout, &stderr)
 
 	stdoutStr := stdout.String()
 	for _, file := range setup.files {
@@ -376,7 +376,7 @@ func TestDownload(t *testing.T) {
 	var stderr bytes.Buffer
 
 	// Perform entire sequence
-	Serve(setup.remotepath, setup.remotepath, false, false, bytes.NewReader(setup.inputBuffer.Bytes()), &stdout, &stderr)
+	Serve(setup.remotepath, setup.remotepath, false, false, false, bytes.NewReader(setup.inputBuffer.Bytes()), &stdout, &stderr)
 
 	// Check reported progress and completion
 	stdoutStr := stdout.String()
@@ -421,7 +421,7 @@ func TestDownloadFallback(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	Serve(base, base, false, false, bytes.NewReader(setup.inputBuffer.Bytes()), &stdout, &stderr)
+	Serve(base, base, false, false, false, bytes.NewReader(setup.inputBuffer.Bytes()), &stdout, &stderr)
 
 	paths := completionPaths(t, stdout.String())
 	for _, file := range setup.files {
@@ -456,7 +456,7 @@ func TestDownloadZip(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	Serve(base, base, false, false, bytes.NewReader(setup.inputBuffer.Bytes()), &stdout, &stderr)
+	Serve(base, base, false, false, false, bytes.NewReader(setup.inputBuffer.Bytes()), &stdout, &stderr)
 
 	paths := completionPaths(t, stdout.String())
 	for _, file := range setup.files {
@@ -490,7 +490,7 @@ func TestDownloadLz4(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	Serve(base, base, false, false, bytes.NewReader(setup.inputBuffer.Bytes()), &stdout, &stderr)
+	Serve(base, base, false, false, false, bytes.NewReader(setup.inputBuffer.Bytes()), &stdout, &stderr)
 
 	paths := completionPaths(t, stdout.String())
 	for _, file := range setup.files {
@@ -525,7 +525,7 @@ func TestDownloadRclone(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	Serve(base, base, false, false, bytes.NewReader(setup.inputBuffer.Bytes()), &stdout, &stderr)
+	Serve(base, base, false, false, false, bytes.NewReader(setup.inputBuffer.Bytes()), &stdout, &stderr)
 
 	paths := completionPaths(t, stdout.String())
 	for _, file := range setup.files {
@@ -710,7 +710,7 @@ func TestStoreScript(t *testing.T) {
 
 	oid := "abcdef"
 	script := fmt.Sprintf("cp \"$FROM\" %s/$OID", remoteDir)
-	err = storeUsingScript(script, "", oid, stat, fromPath, writer, errWriter)
+	err = storeUsingScript(script, "", oid, stat, fromPath, false, writer, errWriter)
 	assert.Nil(t, err)
 
 	dest := filepath.Join(remoteDir, oid)
@@ -740,7 +740,7 @@ func TestServeHandlesLargeRequests(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	Serve("", "", false, false, strings.NewReader(req), &stdout, &stderr)
+	Serve("", "", false, false, false, strings.NewReader(req), &stdout, &stderr)
 
 	assert.Contains(t, stderr.String(), "Terminating test custom adapter gracefully.")
 }

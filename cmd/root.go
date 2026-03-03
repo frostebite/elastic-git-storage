@@ -37,6 +37,7 @@ var (
 	useAction    bool // deprecated: enables both pull and push actions
 	pullMain     bool
 	pushMain     bool
+	writeAll     bool
 	printVersion bool
 )
 
@@ -68,6 +69,7 @@ func init() {
 	RootCmd.Flags().BoolVar(&useAction, "useaction", false, "Also use LFS-provided actions for transfers (deprecated)")
 	RootCmd.Flags().BoolVar(&pullMain, "pullmain", false, "Allow fallback pulling from main LFS remote")
 	RootCmd.Flags().BoolVar(&pushMain, "pushmain", false, "Also push to main LFS remote")
+	RootCmd.Flags().BoolVar(&writeAll, "writeall", false, "Write to all push destinations instead of stopping on first success")
 	RootCmd.Flags().BoolVarP(&printVersion, "version", "", false, "Print version")
 	RootCmd.SetUsageFunc(usageCommand)
 
@@ -86,6 +88,7 @@ Options:
   --useaction  Also perform transfers using LFS-provided actions (deprecated)
   --pullmain   Allow fallback pulling from main LFS remote
   --pushmain   Also push to main LFS remote
+  --writeall   Write to all push destinations instead of stopping on first success
   --version    Report the version number and exit
 
 Note:
@@ -159,9 +162,14 @@ func rootCommand(cmd *cobra.Command, args []string) {
 				pushMain = b
 			}
 		}
+		if !writeAll {
+			if b, ok := getGitConfigBool("lfs.folderstore.writeall"); ok {
+				writeAll = b
+			}
+		}
 	}
 
-	service.Serve(pullDir, push, pullMain, pushMain, os.Stdin, os.Stdout, os.Stderr)
+	service.Serve(pullDir, push, pullMain, pushMain, writeAll, os.Stdin, os.Stdout, os.Stderr)
 }
 
 func getGitConfig(key string) string {
