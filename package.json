@@ -1,6 +1,6 @@
 {
   "name": "com.frostebite.elastic-git-storage",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "displayName": "Elastic Git Storage",
   "description": "Unity Editor integration for elastic-git-storage, a custom Git LFS transfer agent that stores large files on local folders, shared drives, or any rclone-supported cloud storage.",
   "unity": "2021.3",
