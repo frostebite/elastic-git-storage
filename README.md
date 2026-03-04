@@ -11,8 +11,48 @@ A git-lfs plugin that allows you to conveniently use any popular storage provide
 
 > Forked from [lfs-folderstore](https://github.com/sinbad/lfs-folderstore) by Steve Streeting.
 
+## Install Unity Package
+
+The easiest way to get started is via the Unity Package Manager. The package includes an Editor window that downloads the binary, configures git, and validates your setup — no command line required.
+
+### Install via Package Manager
+
+1. Open Unity and go to **Window > Package Manager**
+2. Click the **+** button and select **Add package from git URL...**
+3. Enter:
+   ```
+   https://github.com/frostebite/elastic-git-storage.git
+   ```
+4. Click **Add**
+
+To pin a specific version, append a tag:
+```
+https://github.com/frostebite/elastic-git-storage.git#v0.0.7
+```
+
+### Using the Editor Window
+
+Open **Window > elastic-git-storage** to access the setup tool.
+
+The window has four sections:
+
+- **Status** — Shows whether the binary is installed, its version, and your platform
+- **Install / Update Binary** — Click **Check Latest** then **Download & Install** to fetch the correct binary for your OS directly from GitHub Releases
+- **Git Configuration** — View current config, set your storage path, choose compression, and toggle advanced options. Click **Apply Configuration** to write all git config entries automatically
+- **Validation** — Click **Validate** to check that your binary, paths, and git config are all correct
+
+### Quick Setup (3 clicks)
+
+1. Open **Window > elastic-git-storage**
+2. Click **Check Latest**, then **Download & Install** (binary is downloaded and placed automatically)
+3. Set your **Storage Path** (the folder where LFS objects will be stored), then click **Apply Configuration**
+
+You're done. Git LFS will now use elastic-git-storage for all large file transfers.
+
+---
+
 ## Batteries included
-Fast and easy to setup. 
+Fast and easy to setup.
 
 ## What is it?
 
@@ -46,12 +86,14 @@ Dropbox, or Synology Cloud Drive etc.
 
 You need to be running Git LFS version 2.3.0 or later.
 
-### Download &amp; install
+### Download & install
+
+> **Tip:** If you installed as a Unity Package, the Editor window handles binary installation automatically. The steps below are for manual setups.
 
 You will need `elastic-git-storage[.exe]` to be on your system path somewhere.
 
 Either download and extract the [latest
-release](https://github.com/frostebite/elastic-git-storage/releases), or build it from
+release](https://github.com/frostebite/elastic-git-storage/releases) for your platform, or build it from
 source using the standard `go build`.
 
 ### Configure a fresh repo
