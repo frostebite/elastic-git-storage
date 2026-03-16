@@ -99,7 +99,7 @@ func retrieve(baseDir, gitDir, oid string, size int64, useAction bool, a *api.Ac
 
 	dirs := splitBaseDirs(baseDir)
 	var lastErr error
-	for _, d := range dirs {
+	for i, d := range dirs {
 		var err error
 		if d.script {
 			err = tryRetrieveScript(d.path, gitDir, oid, size, d.compression, writer, errWriter)
@@ -107,13 +107,21 @@ func retrieve(baseDir, gitDir, oid string, size int64, useAction bool, a *api.Ac
 			err = tryRetrieveDir(d.path, gitDir, oid, size, d.compression, writer, errWriter)
 		}
 		if err == nil {
+			if i > 0 {
+				util.WriteToStderr(fmt.Sprintf("LFS: retrieved %s from fallback provider %d: %s\n", oid, i+1, d.path), errWriter)
+			}
 			return
+		}
+		if i == 0 && len(dirs) > 1 {
+			util.WriteToStderr(fmt.Sprintf("LFS: primary provider unavailable, falling back to provider %d: %s\n", i+2, dirs[i+1].path), errWriter)
 		}
 		lastErr = err
 	}
 
 	if useAction && a != nil {
 		if err := retrieveFromAction(a, gitDir, oid, size, writer, errWriter); err == nil {
+			providerCount := len(dirs)
+			util.WriteToStderr(fmt.Sprintf("LFS: retrieved %s from fallback action (after %d provider(s) failed)\n", oid, providerCount), errWriter)
 			return
 		} else {
 			lastErr = err
