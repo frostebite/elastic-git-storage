@@ -742,7 +742,7 @@ func TestServeHandlesLargeRequests(t *testing.T) {
 
 	Serve("", "", false, false, false, strings.NewReader(req), &stdout, &stderr)
 
-	assert.Contains(t, stderr.String(), "Terminating test custom adapter gracefully.")
+	assert.Contains(t, stderr.String(), "Terminating elastic-git-storage custom adapter gracefully.")
 }
 
 func createZipFromFile(src, dest string) error {
