@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/pierrec/lz4/v4"
 
@@ -23,6 +24,113 @@ type baseDirConfig struct {
 	path        string
 	compression string
 	script      bool
+}
+
+// tierName returns a human-readable name for a provider path.
+// Local filesystem paths are labelled "local cache"; rclone remotes
+// (which contain a colon that is not a Windows drive letter) are
+// labelled with the remote name portion (e.g. "WebDAV" from
+// "webdav:bucket/path"); script providers are labelled "script".
+func tierName(cfg baseDirConfig) string {
+	if cfg.script {
+		return "script"
+	}
+	if util.IsRclonePath(cfg.path) {
+		// Extract the rclone remote name before the colon.
+		if idx := strings.Index(cfg.path, ":"); idx > 0 {
+			return cfg.path[:idx]
+		}
+		return "remote"
+	}
+	return "local cache"
+}
+
+// downloadTracker accumulates per-tier download counts and drives
+// the progressive reporting output.
+type downloadTracker struct {
+	mu sync.Mutex
+
+	// Per-tier counters keyed by the human-readable tier name.
+	tierCounts map[string]int
+	// Ordered list of tier names in the order they were first seen,
+	// so the summary prints in a deterministic order.
+	tierOrder []string
+	// Total files downloaded.
+	total int
+
+	// individualLimit is the number of files reported individually
+	// before switching to batch progress updates.
+	individualLimit int
+	// batchInterval is the number of files between batch progress
+	// updates (after the individual limit is exceeded).
+	batchInterval int
+	// nextBatchAt tracks when the next batch progress line should
+	// be emitted.
+	nextBatchAt int
+}
+
+func newDownloadTracker() *downloadTracker {
+	return &downloadTracker{
+		tierCounts:      make(map[string]int),
+		individualLimit: 10,
+		batchInterval:   25,
+		nextBatchAt:     0, // computed after individual limit
+	}
+}
+
+// record logs a successful download from the given tier and emits
+// the appropriate progress line to stderr.
+func (t *downloadTracker) record(oid string, tier string, path string, errWriter *bufio.Writer) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if _, seen := t.tierCounts[tier]; !seen {
+		t.tierOrder = append(t.tierOrder, tier)
+	}
+	t.tierCounts[tier]++
+	t.total++
+
+	shortOid := oid
+	if len(shortOid) > 8 {
+		shortOid = shortOid[:8]
+	}
+
+	if t.total <= t.individualLimit {
+		// Phase 1: log each file individually.
+		util.WriteToStderr(fmt.Sprintf("LFS: [%d] %s <- %s (%s)\n", t.total, shortOid, tier, path), errWriter)
+		if t.total == t.individualLimit {
+			// Set up the first batch threshold.
+			t.nextBatchAt = t.individualLimit + t.batchInterval
+		}
+		return
+	}
+
+	// Phase 2: batch progress at regular intervals.
+	if t.total >= t.nextBatchAt {
+		util.WriteToStderr(fmt.Sprintf("LFS: Progress -- %d files (%s)\n", t.total, t.tierSummary()), errWriter)
+		t.nextBatchAt = t.total + t.batchInterval
+	}
+}
+
+// printSummary writes the final summary line. Called on terminate.
+func (t *downloadTracker) printSummary(errWriter *bufio.Writer) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.total == 0 {
+		return
+	}
+	util.WriteToStderr(fmt.Sprintf("LFS: Complete -- %d files (%s)\n", t.total, t.tierSummary()), errWriter)
+}
+
+// tierSummary returns a comma-separated breakdown like
+// "139 from local cache, 3 from WebDAV". Must be called with mu held.
+func (t *downloadTracker) tierSummary() string {
+	parts := make([]string, 0, len(t.tierOrder))
+	for _, name := range t.tierOrder {
+		parts = append(parts, fmt.Sprintf("%d from %s", t.tierCounts[name], name))
+	}
+	return strings.Join(parts, ", ")
 }
 
 // Serve starts the protocol server
@@ -43,6 +151,8 @@ func Serve(pullBaseDir, pushBaseDir string, usePullAction, usePushAction, writeA
 		return
 	}
 
+	tracker := newDownloadTracker()
+
 	for scanner.Scan() {
 		line := scanner.Text()
 		var req api.Request
@@ -62,8 +172,7 @@ func Serve(pullBaseDir, pushBaseDir string, usePullAction, usePushAction, writeA
 			}
 			api.SendResponse(resp, writer, errWriter)
 		case "download":
-			util.WriteToStderr(fmt.Sprintf("Received download request for %s\n", req.Oid), errWriter)
-			retrieve(pullBaseDir, gitDir, req.Oid, req.Size, usePullAction, req.Action, writer, errWriter)
+			retrieve(pullBaseDir, gitDir, req.Oid, req.Size, usePullAction, req.Action, tracker, writer, errWriter)
 		case "upload":
 			util.WriteToStderr(fmt.Sprintf("Received upload request for %s\n", req.Oid), errWriter)
 			if len(pushBaseDir) == 0 {
@@ -71,7 +180,8 @@ func Serve(pullBaseDir, pushBaseDir string, usePullAction, usePushAction, writeA
 			}
 			store(pushBaseDir, req.Oid, req.Size, usePushAction, writeAll, req.Action, req.Path, writer, errWriter)
 		case "terminate":
-			util.WriteToStderr("Terminating test custom adapter gracefully.\n", errWriter)
+			tracker.printSummary(errWriter)
+			util.WriteToStderr("Terminating elastic-git-storage custom adapter gracefully.\n", errWriter)
 			break
 		}
 	}
@@ -95,7 +205,7 @@ func downloadTempPath(gitDir string, oid string) (string, error) {
 	return filepath.Join(tmpfld, fmt.Sprintf("%v.tmp", oid)), nil
 }
 
-func retrieve(baseDir, gitDir, oid string, size int64, useAction bool, a *api.Action, writer, errWriter *bufio.Writer) {
+func retrieve(baseDir, gitDir, oid string, size int64, useAction bool, a *api.Action, tracker *downloadTracker, writer, errWriter *bufio.Writer) {
 
 	dirs := splitBaseDirs(baseDir)
 	var lastErr error
@@ -107,21 +217,19 @@ func retrieve(baseDir, gitDir, oid string, size int64, useAction bool, a *api.Ac
 			err = tryRetrieveDir(d.path, gitDir, oid, size, d.compression, writer, errWriter)
 		}
 		if err == nil {
-			if i > 0 {
-				util.WriteToStderr(fmt.Sprintf("LFS: retrieved %s from fallback provider %d: %s\n", oid, i+1, d.path), errWriter)
-			}
+			tier := tierName(d)
+			tracker.record(oid, tier, d.path, errWriter)
 			return
 		}
 		if i == 0 && len(dirs) > 1 {
-			util.WriteToStderr(fmt.Sprintf("LFS: primary provider unavailable, falling back to provider %d: %s\n", i+2, dirs[i+1].path), errWriter)
+			util.WriteToStderr(fmt.Sprintf("LFS: primary provider unavailable for %s, falling back to provider %d: %s\n", oid, i+2, dirs[i+1].path), errWriter)
 		}
 		lastErr = err
 	}
 
 	if useAction && a != nil {
 		if err := retrieveFromAction(a, gitDir, oid, size, writer, errWriter); err == nil {
-			providerCount := len(dirs)
-			util.WriteToStderr(fmt.Sprintf("LFS: retrieved %s from fallback action (after %d provider(s) failed)\n", oid, providerCount), errWriter)
+			tracker.record(oid, "LFS action", "remote", errWriter)
 			return
 		} else {
 			lastErr = err
